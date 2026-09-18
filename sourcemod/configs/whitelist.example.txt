@@ -1,0 +1,5 @@
+// 私人服务器白名单：一行一个 SteamID（STEAM_1:x:y），// 后面是备注。
+// 管理员（admins_simple.ini 里的人）不需要写在这里也能进。
+// 文件为空 = 对所有人开放。改完在控制台 sm_wl_reload，或者游戏里 !wl_reload。
+// 在线加人：游戏里 !wl_add 玩家名   按 ID 加：!wl_addid STEAM_1:x:y 备注
+STEAM_1:0:12345678  // 示例：服主

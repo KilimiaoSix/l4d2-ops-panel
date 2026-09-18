@@ -1,0 +1,24 @@
+{
+  "password": "CHANGE-ME",
+  "port": 8443,
+  "bind": "0.0.0.0",
+  "tls": true,
+  "cert": "cert.pem",
+  "key": "key.pem",
+  "session_days": 7,
+
+  "rcon_host": "10.0.0.4",
+  "rcon_port": 27015,
+  "rcon_password": "",
+
+  "game_dir": "/home/l4d2server/serverfiles/left4dead2",
+  "lgsm_script": "/home/l4d2server/l4d2server",
+  "console_log": "/home/l4d2server/log/console/l4d2server-console.log",
+  "perf_csv": "/home/l4d2server/log/perf-samples.csv",
+  "depotdownloader": "/home/l4d2server/tools/depotdownloader/DepotDownloader",
+
+  "panel_title": "L4D2 运维面板",
+  "display_host": "l4d2.example.com",
+  "max_upload_mb": 3072,
+  "protected_addons": ["admin_system.vpk"]
+}

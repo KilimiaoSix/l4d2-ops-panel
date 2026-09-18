@@ -1,0 +1,7 @@
+panel/panel.json
+panel/*.pem
+panel/workshop_tmp/
+panel/sessions.json
+__pycache__/
+*.pyc
+*.smx
