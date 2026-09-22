@@ -920,93 +920,190 @@ class H(BaseHTTPRequestHandler):
         except Exception as e:
             return self.send_json({'error': str(e)}, 500)
 
-PAGE = r"""<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>L4D2 Ops Panel</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧟</text></svg>">
-<style>
-:root{--bg:#0b0f14;--sur:#121820;--sur2:#182029;--bd:#233041;--tx:#e8eef5;--mu:#8a9bb0;--ac:#4f8cff;--ok:#3ddc97;--warn:#ffb454;--bad:#ff5c5c;--r:12px}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif}
-a{color:var(--ac)}#app{display:flex;min-height:100vh}#side{width:210px;flex:none;background:var(--sur);border-right:1px solid var(--bd);display:flex;flex-direction:column}#side .brand{padding:16px 14px;font-weight:600;font-size:15px;border-bottom:1px solid var(--bd)}#side nav{display:flex;flex-direction:column;padding:8px}#side nav button{background:transparent;color:var(--mu);text-align:left;padding:10px 12px;border-radius:8px;font-size:13px}#side nav button:hover{background:var(--sur2);color:var(--tx)}#side nav button.on{background:var(--ac);color:#fff}#main{flex:1;min-width:0;padding:16px 20px;max-width:1200px}.view{display:none}.view.on{display:block}@media(max-width:860px){#app{flex-direction:column}#side{width:auto;border-right:0;border-bottom:1px solid var(--bd)}#side .brand{display:none}#side nav{flex-direction:row;overflow-x:auto;gap:4px}#side nav button{white-space:nowrap;padding:8px 10px}#side>div.mu{display:none}#main{padding:12px}}
-header{display:flex;align-items:center;gap:12px;padding:4px 0 14px;border-bottom:1px solid var(--bd);margin-bottom:16px}
-header h1{font-size:17px;margin:0;font-weight:600;white-space:nowrap}@media(max-width:480px){header h1{font-size:15px}.wrap{padding:10px}}header .sp{flex:1}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;background:var(--sur2);border:1px solid var(--bd)}
-.pill i{width:8px;height:8px;border-radius:50%;background:var(--mu)}.pill.on i{background:var(--ok);box-shadow:0 0 8px var(--ok)}.pill.off i{background:var(--bad)}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
-.tile{background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:12px 14px}.tile .k{font-size:12px;color:var(--mu)}.tile .v{font-size:20px;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tile .s{font-size:11px;color:var(--mu)}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:860px){.grid{grid-template-columns:1fr}}
-.card{background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:14px}
-.card h2{font-size:14px;margin:0 0 10px;display:flex;align-items:center;gap:8px}.card h2 .sp{flex:1}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0}.lbl{color:var(--mu);font-size:12px;min-width:48px}
-button{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:8px 13px;font-size:13px;cursor:pointer;transition:.15s;font-family:inherit}button:hover{filter:brightness(1.1)}button:disabled{opacity:.5;cursor:default}
-button.g{background:var(--sur2);border:1px solid var(--bd);color:var(--tx)}button.d{background:var(--bad)}button.sm{padding:5px 9px;font-size:12px}
-.seg{display:inline-flex;background:var(--sur2);border:1px solid var(--bd);border-radius:8px;overflow:hidden}.seg button{background:transparent;color:var(--mu);border-radius:0;padding:7px 12px}.seg button.on{background:var(--ac);color:#fff}
-input,select{background:#0d1219;color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}input:focus,select:focus{outline:1px solid var(--ac)}input[type=file]{color:var(--mu)}input[type=file]::file-selector-button{background:var(--sur2);color:var(--tx);border:1px solid var(--bd);border-radius:6px;padding:5px 10px;margin-right:8px;font-family:inherit;cursor:pointer}
-table{width:100%;border-collapse:collapse;font-size:13px}th{color:var(--mu);font-weight:500;font-size:12px;text-align:left;padding:6px 8px;border-bottom:1px solid var(--bd)}td{padding:8px;border-bottom:1px solid #1b2530;vertical-align:middle}tr:last-child td{border-bottom:0}
-pre{background:#0d1219;border:1px solid var(--bd);padding:10px;border-radius:8px;max-height:340px;overflow:auto;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;margin:0}
-.mu{color:var(--mu);font-size:12px}.tabs{display:flex;gap:6px}.tabs button{background:var(--sur2);border:1px solid var(--bd);color:var(--mu);padding:5px 10px;font-size:12px}.tabs button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
-#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1d2733;border:1px solid var(--bd);padding:10px 16px;border-radius:10px;font-size:13px;box-shadow:0 8px 30px #0008;opacity:0;pointer-events:none;transition:.2s;max-width:90vw}#toast.show{opacity:1}
-#login,#setup{max-width:360px;margin:12vh auto;text-align:center}body{padding:0}code{background:var(--sur2);padding:1px 5px;border-radius:4px;font-size:12px}#login input,#setup input{width:100%;margin:12px 0;font-size:15px;padding:11px}#login button,#setup button{width:100%;padding:11px;font-size:15px}
-.sw{position:relative;width:46px;height:26px;background:#3a4250;border-radius:999px;cursor:pointer;transition:.2s;flex:none}.sw::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}.sw.on{background:var(--ok)}.sw.on::after{left:23px}.sw.dis{opacity:.4;cursor:default}
-.bar{height:6px;background:#1b2530;border-radius:3px;overflow:hidden;margin:4px 0 6px}.bar i{display:block;height:100%;background:var(--ok);transition:width .5s}
-canvas{width:100%;height:56px;display:block}.wl{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #1b2530;font-size:13px}.wl:last-child{border:0}.wl code{color:var(--mu)}
-</style></head><body>
-<div id="setup" class="card" style="display:none"><div style="font-size:40px">🧟</div><h2 style="margin:6px 0">首次使用：设置管理员密码</h2><div class="mu">账号 <code id="su-user">admin</code> 是 owner，之后可以在“账号”页改密码、加其他账号。</div><input id="su-pw" type="password" placeholder="设置密码（至少 4 位）" autocomplete="new-password" onkeydown="if(event.key==='Enter')setup()"><input id="su-pw2" type="password" placeholder="再输一次" autocomplete="new-password" onkeydown="if(event.key==='Enter')setup()"><button onclick="setup()">设置并进入面板</button><div id="sumsg" class="mu" style="margin-top:8px;color:var(--bad)"></div></div>
-<div id="login" class="card"><div style="font-size:40px">🧟</div><h2 style="margin:6px 0">L4D2 Ops Panel</h2><div class="mu">Left 4 Dead 2 服务器运维面板</div><input id="user" placeholder="用户名" autocomplete="username" onkeydown="if(event.key==='Enter')login()"><input id="pw" type="password" placeholder="密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"><button onclick="login()">登录</button><div id="lmsg" class="mu" style="margin-top:8px;color:var(--bad)"></div></div>
-<div id="app" style="display:none">
-<aside id="side"><div class="brand" id="brand">🧟 L4D2 面板</div>
+# ---- web UI: one page. CSS / markup / script are separate strings so the design canvas and the panel share them ----
+MARK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="9" fill="none" stroke="#f0a13a" stroke-width="2.6"/><path d="M16 2.5v6M16 23.5v6M2.5 16h6M23.5 16h6" stroke="#f0a13a" stroke-width="2.6" stroke-linecap="round"/><circle cx="16" cy="16" r="2.6" fill="#f0a13a"/></svg>'
+CSS = r"""
+:root{--bg:#161311;--sur:#1e1a17;--sur2:#292420;--inp:#110e0c;--bd:#372f29;--bd2:#4b4139;--tx:#f2ece3;--mu:#a89e91;--ac:#f0a13a;--ac-ink:#1b1208;--ac2:#ffbe62;--ok:#5ed389;--ok-ink:#08170d;--warn:#f4cf5e;--bad:#bf3a31;--bad2:#ff8078;--r:10px;--r2:6px;
+--fd:"Barlow Condensed","Bahnschrift SemiCondensed","Avenir Next Condensed","Roboto Condensed","Arial Narrow",sans-serif;
+--fb:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Segoe UI",sans-serif;
+--fm:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+--tape:repeating-linear-gradient(135deg,#f0a13a 0 14px,#2b241e 14px 28px);color-scheme:dark}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 var(--fb);-webkit-font-smoothing:antialiased}
+a{color:var(--ac2)}a:hover{color:var(--ac)}
+.eyebrow{font-family:var(--fd);font-weight:600;font-size:12px;line-height:1;letter-spacing:.16em;text-transform:uppercase;color:var(--ac)}
+.k{font-family:var(--fd);font-weight:600;font-size:11px;line-height:1;letter-spacing:.14em;text-transform:uppercase;color:var(--mu)}
+.mu{color:var(--mu);font-size:12px}.hint{color:var(--mu);font-size:12px;line-height:1.6;margin-top:8px}.sp{flex:1}
+.tape{height:3px;background:var(--tape);flex:none}
+code{font-family:var(--fm);font-size:12px;background:var(--sur2);padding:2px 6px;border-radius:4px;color:var(--tx)}code.mu{color:var(--mu)}
+/* shell + rail */
+#shell{min-height:100%;container:shell/inline-size;display:flex;flex-direction:column;background:radial-gradient(1100px 520px at 12% -8%,#2a2119 0%,rgba(42,33,25,0) 62%),var(--bg)}
+#app{display:flex;flex:1}
+#side{width:236px;flex:none;background:var(--sur);border-right:1px solid var(--bd);display:flex;flex-direction:column;gap:12px;padding:16px 12px 14px}
+.brand{display:flex;align-items:center;gap:10px;padding:0 4px 14px;border-bottom:1px solid var(--bd)}
+.brand .mark{width:34px;height:34px;flex:none;color:var(--ac)}.brand .min{min-width:0}
+.brand .name{font-size:14px;font-weight:600;line-height:1.25;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srv{background:var(--inp);border:1px solid var(--bd);border-radius:var(--r2);padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+.kv{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;min-width:0}
+.kv code{background:none;padding:0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kv b{font-family:var(--fd);font-size:17px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.pill{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--mu)}
+.pill i{width:9px;height:9px;border-radius:50%;background:var(--mu);flex:none}
+.pill.on{color:var(--ok)}.pill.on i{background:var(--ok);animation:pulse 2.2s ease-out infinite}.pill.off{color:var(--bad2)}.pill.off i{background:var(--bad2)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(94,211,137,.45)}100%{box-shadow:0 0 0 8px rgba(94,211,137,0)}}
+#side nav{display:flex;flex-direction:column;gap:2px}
+#side nav button{display:flex;justify-content:flex-start;align-items:center;gap:10px;width:100%;background:transparent;color:var(--mu);text-align:left;padding:0 10px;height:38px;border:0;border-radius:var(--r2);font-size:13.5px;font-weight:500}
+#side nav button svg{width:18px;height:18px;flex:none;opacity:.75}
+#side nav button:hover{background:var(--sur2);color:var(--tx)}
+#side nav button.on{background:#2e2620;color:var(--ac2);box-shadow:inset 3px 0 0 var(--ac)}#side nav button.on svg{opacity:1;color:var(--ac)}
+.foot{margin-top:auto;padding:12px 4px 0;border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:6px}
+.foot code{background:none;padding:0;font-size:11.5px;color:var(--tx);word-break:break-all}
+/* main + header */
+#main{flex:1;min-width:0;padding:22px 28px 48px;max-width:1240px}
+header{display:flex;align-items:flex-end;gap:14px;padding:0 0 16px;border-bottom:1px solid var(--bd);margin-bottom:18px;flex-wrap:wrap}
+header .ttl{display:flex;flex-direction:column;gap:5px}
+header h1{font-size:24px;margin:0;font-weight:700;line-height:1.15}
+header .meta{display:flex;align-items:center;gap:10px;color:var(--mu);font-size:12px;flex-wrap:wrap}
+header .meta svg{width:14px;height:14px}
+.view{display:none}.view.on{display:block}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.view.on>*{animation:rise .32s ease both}.view.on>*:nth-child(2){animation-delay:.05s}.view.on>*:nth-child(3){animation-delay:.1s}.view.on>*:nth-child(4){animation-delay:.15s}
+/* status band + cards */
+.band{display:grid;grid-template-columns:1fr 1.55fr 1fr 1fr 1.05fr 1.1fr;gap:1px;background:var(--bd);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;margin-bottom:16px}
+.tile{background:var(--sur);padding:14px 16px 13px;min-width:0}
+.tile .v{font-family:var(--fd);font-weight:700;font-size:30px;line-height:1.1;margin-top:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.tile .v.mono{font-family:var(--fm);font-weight:500;font-size:15px;line-height:1.35;margin-top:11px}
+.tile .s{font-size:11.5px;color:var(--mu);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.card{background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:16px 18px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:10px;font-weight:600;flex-wrap:wrap}
+.card h2::before{content:"";width:4px;height:15px;background:var(--ac);border-radius:1px;flex:none}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0}.lbl{color:var(--mu);font-size:12px;min-width:44px}
+label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--mu)}
+.sl{display:flex;flex-direction:column;gap:4px;margin-top:8px}.spark{width:100%;height:64px;display:block}
+.spark .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}.spark .ar{opacity:.14}.spark text{font-family:var(--fm);font-size:10px;fill:var(--mu)}.spark .last{font-weight:700;font-size:11px}
+/* controls */
+button{background:var(--ac);color:var(--ac-ink);border:1px solid transparent;border-radius:var(--r2);padding:0 14px;height:36px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;transition:background .15s,border-color .15s,transform .05s}
+button:hover{background:var(--ac2)}button:active{transform:translateY(1px)}button:disabled{opacity:.45;cursor:default}button:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+button.g{background:transparent;border-color:var(--bd2);color:var(--tx)}button.g:hover{background:var(--sur2);border-color:var(--mu)}
+button.d{background:var(--bad);color:#fff}button.d:hover{background:#ad332b}
+button.sm{height:30px;padding:0 10px;font-size:12px;font-weight:500}
+.seg{display:inline-flex;background:var(--inp);border:1px solid var(--bd);border-radius:var(--r2);padding:3px;gap:2px}
+.seg button{background:transparent;color:var(--mu);height:30px;padding:0 14px;font-weight:500;border-radius:4px}.seg button:hover{color:var(--tx);background:var(--sur2)}.seg button.on{background:var(--ac);color:var(--ac-ink);font-weight:600}
+.tabs{display:flex;gap:2px;background:var(--inp);border:1px solid var(--bd);border-radius:var(--r2);padding:3px}
+.tabs button{background:transparent;color:var(--mu);height:28px;padding:0 12px;font-size:12px;font-weight:500;border-radius:4px}.tabs button:hover{color:var(--tx)}.tabs button.on{background:var(--sur2);color:var(--tx)}
+input,select{background:var(--inp);color:var(--tx);border:1px solid var(--bd);border-radius:var(--r2);padding:0 11px;height:36px;font-size:13px;font-family:inherit;min-width:0}
+input:focus,select:focus{outline:2px solid var(--ac);outline-offset:-1px;border-color:var(--ac)}input::placeholder{color:#75695d}input[type=number]{font-family:var(--fm)}
+input[type=file]{padding:0;height:auto;border:1px dashed var(--bd2);background:transparent;color:var(--mu);font-size:12px;line-height:34px}
+input[type=file]::file-selector-button{background:var(--sur2);color:var(--tx);border:0;border-right:1px solid var(--bd);padding:0 12px;height:34px;margin-right:10px;font-family:inherit;font-size:12px;cursor:pointer}
+button.sw{position:relative;width:44px;height:24px;padding:0;background:var(--bd2);border:0;border-radius:999px;flex:none;transition:background .2s}
+button.sw::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .2s}
+button.sw.on{background:var(--ok)}button.sw.on::after{left:23px;background:var(--ok-ink)}button.sw.dis{opacity:.4;cursor:default}
+/* tables, lists, output */
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-family:var(--fd);font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);text-align:left;padding:6px 8px;border-bottom:1px solid var(--bd2);white-space:nowrap}
+td{padding:9px 8px;border-bottom:1px solid var(--bd);vertical-align:middle}tr:last-child td{border-bottom:0}tr:hover td{background:#221e1a}td.act{white-space:nowrap;text-align:right}
+.wl{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid var(--bd);font-size:13px}.wl:last-child{border:0}.wl>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.job{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--mu);padding:5px 0}.jr{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.jr i{width:8px;height:8px;border-radius:50%;background:var(--bad2);flex:none}.job.running .jr i{background:var(--warn);animation:blink 1.2s ease-in-out infinite}.job.done .jr i{background:var(--ok)}.bar{height:6px;max-width:460px;background:var(--inp);border:1px solid var(--bd);border-radius:3px;overflow:hidden}.bar span{display:block;height:100%;background:var(--ac);transition:width .5s}
+@keyframes blink{50%{opacity:.35}}
+pre{background:var(--inp);border:1px solid var(--bd);padding:12px 14px;border-radius:var(--r2);max-height:340px;overflow:auto;font-family:var(--fm);font-size:12px;line-height:1.55;white-space:pre-wrap;margin:0;color:#d9d1c5}
+#toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(8px);background:#241f1b;border:1px solid var(--bd2);border-left:3px solid var(--ok);color:var(--tx);padding:11px 16px;border-radius:var(--r2);font-size:13px;box-shadow:0 12px 40px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.2s;max-width:90vw;z-index:20}
+#toast.show{opacity:1;transform:translateX(-50%)}#toast.bad{border-left-color:var(--bad2)}
+/* login */
+#login,#setup{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(800px 480px at 50% 0%,#2a2119 0%,rgba(42,33,25,0) 70%),var(--bg)}
+#login .box,#setup .box{width:100%;max-width:380px;background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+#login .in,#setup .in{padding:26px 28px 24px;display:flex;flex-direction:column;gap:10px}#login .mark,#setup .mark{width:44px;height:44px;color:var(--ac);margin-bottom:6px}
+#login h2,#setup h2{margin:4px 0 2px;font-size:22px;font-weight:700}#login label,#setup label{margin-top:8px;font-size:12px}
+#login input,#setup input{height:42px;font-size:15px}#login button,#setup button{height:42px;font-size:15px;margin-top:10px}#lmsg,#sumsg{color:var(--bad2);font-size:12.5px;min-height:18px}
+/* phone / narrow */
+@container shell (max-width:860px){
+#app{flex-direction:column}
+#side{width:auto;border-right:0;border-bottom:1px solid var(--bd);flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px 0;position:sticky;top:0;z-index:5}
+.brand{padding:0;border:0;flex:1;min-width:0}.brand .mark{width:28px;height:28px}.brand .name{margin-top:2px}
+.srv{flex-direction:row;align-items:center;gap:12px;padding:6px 10px}.srv .kv .k,.srv .kv code{display:none}.kv b{font-size:15px}
+#side nav{flex-direction:row;overflow-x:auto;flex-basis:100%;gap:2px;scrollbar-width:none;padding-bottom:8px}#side nav::-webkit-scrollbar{display:none}
+#side nav button{width:auto;height:34px;padding:0 10px;font-size:13px;gap:7px}#side nav button svg{width:16px;height:16px}#side nav button.on{box-shadow:inset 0 -2px 0 var(--ac)}
+.foot{display:none}#main{padding:14px 14px 40px}header{margin-bottom:14px;padding-bottom:12px}header h1{font-size:21px}
+.band{grid-template-columns:repeat(3,minmax(0,1fr))}.tile{padding:12px 12px 11px}.tile .v{font-size:24px}.grid{grid-template-columns:1fr}.card{padding:14px}
+button.sm{height:34px}
+}
+@container shell (max-width:480px){.band{grid-template-columns:repeat(2,minmax(0,1fr))}header .meta{width:100%}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+"""
+BODY = r"""
+<div id="login"><div class="box"><div class="tape"></div><div class="in">
+<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M16 2.5v6M16 23.5v6M2.5 16h6M23.5 16h6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="16" cy="16" r="2.6" fill="currentColor"/></svg>
+<div class="eyebrow">L4D2 Ops Panel</div><h2>登录面板</h2><div class="mu">Left 4 Dead 2 服务器运维面板</div>
+<label for="user">用户名</label><input id="user" placeholder="用户名" autocomplete="username" onkeydown="if(event.key==='Enter')login()">
+<label for="pw">密码</label><input id="pw" type="password" placeholder="密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()">
+<button onclick="login()">登录</button><div id="lmsg"></div>
+</div></div></div>
+<div id="setup" style="display:none"><div class="box"><div class="tape"></div><div class="in">
+<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M16 2.5v6M16 23.5v6M2.5 16h6M23.5 16h6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="16" cy="16" r="2.6" fill="currentColor"/></svg>
+<div class="eyebrow">L4D2 Ops Panel</div><h2>首次使用：设置管理员密码</h2><div class="mu">账号 <code id="su-user">admin</code> 是 owner，之后可以在“账号”页改密码、加其他账号。</div>
+<label for="su-pw">密码（至少 4 位）</label><input id="su-pw" type="password" placeholder="设置密码" autocomplete="new-password" onkeydown="if(event.key==='Enter')setup()">
+<label for="su-pw2">再输一次</label><input id="su-pw2" type="password" placeholder="再输一次" autocomplete="new-password" onkeydown="if(event.key==='Enter')setup()">
+<button onclick="setup()">设置并进入面板</button><div id="sumsg"></div>
+</div></div></div>
+<div id="shell" style="display:none"><div class="tape"></div><div id="app">
+<aside id="side">
+<div class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M16 2.5v6M16 23.5v6M2.5 16h6M23.5 16h6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="16" cy="16" r="2.6" fill="currentColor"/></svg><div class="min"><div class="eyebrow">L4D2 Ops</div><div class="name" id="brand">L4D2 面板</div></div></div>
+<div class="srv"><span id="pill" class="pill"><i></i><span>连接中</span></span><div class="kv"><span class="k">地图</span><code id="side-map">—</code></div><div class="kv"><span class="k">玩家</span><b id="side-players">—</b></div></div>
 <nav>
-<button data-v="overview" onclick="nav('overview')">📊 概览</button>
-<button data-v="players" onclick="nav('players')">👥 玩家 / 白名单</button>
-<button data-v="game" onclick="nav('game')">🎮 游戏设置</button>
-<button data-v="maps" onclick="nav('maps')">🗺️ 地图 / 战役</button>
-<button data-v="plugins" onclick="nav('plugins')">🧩 插件</button>
-<button data-v="console" onclick="nav('console')">⌨️ 控制台</button>
-<button data-v="logs" onclick="nav('logs')">📜 日志 / 性能</button>
-<button data-v="server" onclick="nav('server')">🖥️ 服务器</button>
-<button data-v="accounts" onclick="nav('accounts')">🔐 账号</button>
-</nav><div class="mu" id="sidehost" style="padding:12px 14px;font-size:11px"></div></aside>
+<button data-v="overview" onclick="nav('overview')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>概览</button>
+<button data-v="players" onclick="nav('players')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M21 19c0-2.5-1.8-4.5-4-4.5"/></svg>玩家 / 白名单</button>
+<button data-v="game" onclick="nav('game')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"/><circle cx="16" cy="7" r="2.5"/><circle cx="10" cy="17" r="2.5"/></svg>游戏设置</button>
+<button data-v="maps" onclick="nav('maps')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>地图 / 战役</button>
+<button data-v="plugins" onclick="nav('plugins')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4a2 2 0 1 1 4 0v1h4a1 1 0 0 1 1 1v4h-1a2 2 0 1 0 0 4h1v4a1 1 0 0 1-1 1h-4v-1a2 2 0 1 0-4 0v1H6a1 1 0 0 1-1-1v-4h1a2 2 0 1 0 0-4H5V6a1 1 0 0 1 1-1h4z"/></svg>插件</button>
+<button data-v="console" onclick="nav('console')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>控制台</button>
+<button data-v="logs" onclick="nav('logs')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h10l4 4v12H5z"/><path d="M15 4v4h4M8 12h8M8 16h8"/></svg>日志 / 性能</button>
+<button data-v="server" onclick="nav('server')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg>服务器</button>
+<button data-v="accounts" onclick="nav('accounts')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M15 12v2"/></svg>账号</button>
+</nav>
+<div class="foot" id="sidefoot" style="display:none"><span class="k">连接地址</span><code id="sidehost"></code></div>
+</aside>
 <div id="main">
-<header><h1 id="vtitle">概览</h1><span id="pill" class="pill"><i></i><span>连接中</span></span><span class="sp"></span><span id="who" class="mu" style="margin-right:4px;cursor:pointer" title="我的账号" onclick="nav('accounts')"></span><span id="ts" class="mu"></span><button class="g sm" onclick="logout()">退出</button></header>
+<header><div class="ttl"><div class="eyebrow" id="veyebrow">Overview</div><h1 id="vtitle">概览</h1></div><span class="sp"></span><div class="meta"><span>刷新于 <span id="ts">—</span></span><button id="who" class="g sm" title="我的账号" onclick="nav('accounts')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg><span id="who-name"></span></button><button class="g sm" onclick="logout()">退出</button></div></header>
 
 <section class="view" id="v-overview">
-<div class="tiles">
+<div class="band">
 <div class="tile"><div class="k">玩家</div><div class="v" id="t-players">-</div><div class="s" id="t-bots"></div></div>
-<div class="tile"><div class="k">地图</div><div class="v" id="t-map" style="font-size:16px">-</div><div class="s" id="t-name"></div></div>
+<div class="tile"><div class="k">地图</div><div class="v mono" id="t-map">-</div><div class="s" id="t-name"></div></div>
 <div class="tile"><div class="k">特感预设</div><div class="v" id="t-preset">-</div><div class="s" id="t-diff"></div></div>
 <div class="tile"><div class="k">Server FPS</div><div class="v" id="t-fps">-</div><div class="s">≥ 29 正常（有人时采样）</div></div>
 <div class="tile"><div class="k">出流量</div><div class="v" id="t-out">-</div><div class="s">5M 带宽上限 ≈ 625 KB/s</div></div>
 <div class="tile"><div class="k">系统负载</div><div class="v" id="t-load">-</div><div class="s" id="t-mem"></div></div>
 </div>
-<div class="grid"><div class="card"><h2>性能<span class="sp"></span><span class="mu">最近 120 次采样</span></h2><div class="mu" style="margin-bottom:2px">Server FPS</div><canvas id="c-fps"></canvas><div class="mu" style="margin:8px 0 2px">出流量 KB/s</div><canvas id="c-out"></canvas></div>
-<div class="card"><h2>在线玩家<span class="sp"></span><button class="g sm" onclick="nav('players')">管理</button></h2><table id="players-mini"></table></div></div>
+<div class="grid"><div class="card"><h2>性能<span class="sp"></span><span class="mu">最近 120 次采样</span></h2><div class="sl"><span class="k">Server FPS</span><svg class="spark" id="c-fps"></svg></div><div class="sl"><span class="k">出流量 KB/s</span><svg class="spark" id="c-out"></svg></div></div>
+<div class="card"><h2>在线玩家<span class="sp"></span><button class="g sm" onclick="nav('players')">管理</button></h2><div class="tw"><table id="players-mini"></table></div></div></div>
 </section>
 
 <section class="view" id="v-players">
-<div class="card"><h2>在线玩家<span class="sp"></span><button class="g sm" onclick="loadPlayers()">刷新</button></h2><table id="players"></table></div>
+<div class="card"><h2>在线玩家<span class="sp"></span><button class="g sm" onclick="loadPlayers()">刷新</button></h2><div class="tw"><table id="players"></table></div></div>
 <div class="card" data-f="whitelist"><h2>白名单<span class="sp"></span><span id="wlcount" class="mu"></span></h2>
-<div class="row" style="margin-bottom:10px"><span id="sw-wl" class="sw dis" onclick="wlToggle()"></span><span id="wl-state" class="mu">读取中…</span></div>
-<div class="mu" style="margin-bottom:8px">开启 = 只有名单里的人和管理员能进；关闭 = 任何人都能进（临时给朋友开门时用，加完人记得开回来）。</div>
-<div class="row"><input id="wlid" placeholder="SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:180px"><input id="wlnote" placeholder="备注" style="width:110px"><button onclick="wl('add')">添加</button></div><div id="wllist"></div></div>
+<div class="row" style="margin-bottom:6px"><button type="button" id="sw-wl" class="sw dis" aria-label="白名单开关" onclick="wlToggle()"></button><span id="wl-state" class="mu">读取中…</span></div>
+<div class="hint" style="margin:0 0 12px">开启 = 只有名单里的人和管理员能进；关闭 = 任何人都能进（临时给朋友开门时用，加完人记得开回来）。</div>
+<div class="row"><input id="wlid" placeholder="SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:180px"><input id="wlnote" placeholder="备注" style="width:120px"><button onclick="wl('add')">添加</button></div><div id="wllist"></div></div>
 </section>
 
 <section class="view" id="v-game">
-<div class="card" data-f="preset"><h2>特感强度</h2><div class="row"><span class="seg" id="seg-preset"><button onclick="preset('auto')">auto</button><button onclick="preset('te8')">te8</button><button onclick="preset('te12')">te12</button><button onclick="preset('te16')">te16</button></span></div><div class="mu">auto = 按存活人数 4→16 只自动缩放；te8/te12/te16 = 固定数量。切换立即生效并保存，换图、重启都保持。</div></div>
-<div class="card"><h2>难度</h2><div class="row"><span class="seg" id="seg-diff"><button data-v="easy" onclick="diff('easy')">简单</button><button data-v="normal" onclick="diff('normal')">普通</button><button data-v="hard" onclick="diff('hard')">高级</button><button data-v="impossible" onclick="diff('impossible')">专家</button></span></div><div class="mu">即时生效，并跨换图保持（默认专家，由 Force Difficulty 插件维持）；已刷出的 Tank 血量不变。</div></div>
-<div class="card"><h2>伤害</h2><div class="row"><label>友伤 <input id="dmg-ff" type="number" min="0" max="1" step="0.05" style="width:80px"></label><label>火焰伤害 <input id="dmg-burn" type="number" min="0" max="1" step="0.05" style="width:80px"></label><button onclick="damage()">应用</button></div><div class="mu">0 = 无伤害，1 = 全额。即时生效并写入 server.cfg（重启保持）。四个难度档位统一设为同一值，所以投票换难度后也不变；游戏默认友伤 0.1/0.3/0.5、火焰 0.2/0.2/0.4/1。</div></div>
-<div class="card" data-f="points"><h2>发放积分</h2><div class="row"><select id="ptarget" style="flex:1;min-width:0" onchange="document.getElementById('pcustom').style.display=this.value==='__custom'?'':'none'"><option value="@all">全体在线玩家</option></select><input id="pcustom" placeholder="玩家名 / #userid" style="width:130px;display:none"><input id="pamount" type="number" value="300" style="width:90px"><button onclick="points()">发放</button></div><div class="mu">通过 Points System 的 sm_givepoints 发放。</div></div>
+<div class="card" data-f="preset"><h2>特感强度</h2><div class="row"><span class="seg" id="seg-preset"><button onclick="preset('auto')">auto</button><button onclick="preset('te8')">te8</button><button onclick="preset('te12')">te12</button><button onclick="preset('te16')">te16</button></span></div><div class="hint">auto = 按存活人数 4→16 只自动缩放；te8/te12/te16 = 固定数量。切换立即生效并保存，换图、重启都保持。</div></div>
+<div class="card"><h2>难度</h2><div class="row"><span class="seg" id="seg-diff"><button data-v="easy" onclick="diff('easy')">简单</button><button data-v="normal" onclick="diff('normal')">普通</button><button data-v="hard" onclick="diff('hard')">高级</button><button data-v="impossible" onclick="diff('impossible')">专家</button></span></div><div class="hint">即时生效，并跨换图保持（默认专家，由 Force Difficulty 插件维持）；已刷出的 Tank 血量不变。</div></div>
+<div class="card"><h2>伤害</h2><div class="row"><label>友伤 <input id="dmg-ff" type="number" min="0" max="1" step="0.05" style="width:86px"></label><label>火焰伤害 <input id="dmg-burn" type="number" min="0" max="1" step="0.05" style="width:86px"></label><button onclick="damage()">应用</button></div><div class="hint">0 = 无伤害，1 = 全额。即时生效并写入 server.cfg（重启保持）。四个难度档位统一设为同一值，所以投票换难度后也不变；游戏默认友伤 0.1/0.3/0.5、火焰 0.2/0.2/0.4/1。</div></div>
+<div class="card" data-f="points"><h2>发放积分</h2><div class="row"><select id="ptarget" style="flex:1;min-width:0" onchange="document.getElementById('pcustom').style.display=this.value==='__custom'?'':'none'"><option value="@all">全体在线玩家</option></select><input id="pcustom" placeholder="玩家名 / #userid" style="width:140px;display:none"><input id="pamount" type="number" value="300" style="width:96px"><button onclick="points()">发放</button></div><div class="hint">通过 Points System 的 sm_givepoints 发放。</div></div>
 </section>
 
 <section class="view" id="v-maps">
-<div class="card"><h2>切换地图</h2><div class="row"><select id="map" style="flex:1;min-width:0"></select><button onclick="changemap()">切换</button></div><div class="mu">官方 14 个战役 + 已安装的自定义战役。切换会丢失当前进度。</div></div>
+<div class="card"><h2>切换地图</h2><div class="row"><select id="map" style="flex:1;min-width:0"></select><button onclick="changemap()">切换</button></div><div class="hint">官方 14 个战役 + 已安装的自定义战役。切换会丢失当前进度。</div></div>
 <div class="card"><h2>自定义战役<span class="sp"></span><button class="g sm" onclick="loadAddons()">刷新</button></h2>
 <div class="row" data-f="workshop"><span class="lbl">工坊</span><input id="wsid" placeholder="创意工坊 ID 或链接" style="flex:1;min-width:0"><button onclick="workshop()">下载安装</button></div>
-<div class="row"><span class="lbl">上传</span><input type="file" id="vpkfile" accept=".vpk" style="flex:1;min-width:0;padding:6px"><button onclick="upload()">上传</button></div>
-<div id="upmsg" class="mu"></div><div id="addons" style="margin-top:6px"></div>
-<div class="mu" style="margin-top:8px">装完自动热加载，不用重启。玩家客户端也要订阅同一个创意工坊物品，否则进不了自定义战役。</div></div>
+<div class="row"><span class="lbl">上传</span><input type="file" id="vpkfile" accept=".vpk" style="flex:1;min-width:0"><button onclick="upload()">上传</button></div>
+<div id="upmsg" class="mu"></div><div id="addons" style="margin-top:8px"></div>
+<div class="hint">装完自动热加载，不用重启。玩家客户端也要订阅同一个创意工坊物品，否则进不了自定义战役。</div></div>
 </section>
 
 <section class="view" id="v-console">
-<div class="card"><h2>RCON 控制台</h2><div class="row"><input id="cmd" placeholder="status · sm plugins list · sm_cvar z_difficulty · sm_wl_list …" style="flex:1" onkeydown="if(event.key==='Enter')rcon();if(event.key==='ArrowUp'&&hist.length){this.value=hist[hist.length-1]}"><button onclick="rcon()">发送</button></div><pre id="rout" style="max-height:60vh">(输出显示在这里)</pre>
-<div class="mu" style="margin-top:8px">隐藏 cvar（z_common_limit、nb_update_frequency、sv_airaccelerate 等）要写 <code>sm_cvar 名字 [值]</code>。</div></div>
+<div class="card"><h2>RCON 控制台</h2><div class="row"><input id="cmd" placeholder="status · sm plugins list · sm_cvar z_difficulty · sm_wl_list …" style="flex:1;font-family:var(--fm)" onkeydown="if(event.key==='Enter')rcon();if(event.key==='ArrowUp'&&hist.length){this.value=hist[hist.length-1]}"><button onclick="rcon()">发送</button></div><pre id="rout" style="max-height:60vh">(输出显示在这里)</pre>
+<div class="hint">隐藏 cvar（z_common_limit、nb_update_frequency、sv_airaccelerate 等）要写 <code>sm_cvar 名字 [值]</code>。↑ 取回上一条命令。</div></div>
 </section>
 
 <section class="view" id="v-logs">
@@ -1014,66 +1111,71 @@ canvas{width:100%;height:56px;display:block}.wl{display:flex;justify-content:spa
 </section>
 
 <section class="view" id="v-server">
-<div class="card" data-f="lgsm"><h2>服务器控制<span class="sp"></span><span id="actmsg" class="mu"></span></h2><div class="row"><button onclick="act('restart')">重启</button><button class="g" onclick="act('start')">启动</button><button class="d" onclick="act('stop')">停止</button><button class="g" onclick="act('monitor')">巡检</button></div><div class="mu">重启约 1 分钟；有玩家在线时会断开所有人。</div></div>
+<div class="card" data-f="lgsm"><h2>服务器控制<span class="sp"></span><span id="actmsg" class="mu"></span></h2><div class="row"><button onclick="act('restart')">重启</button><button class="g" onclick="act('start')">启动</button><button class="d" onclick="act('stop')">停止</button><button class="g" onclick="act('monitor')">巡检</button></div><div class="hint">重启约 1 分钟；有玩家在线时会断开所有人。</div></div>
 <div class="card"><h2>系统</h2><div id="sysinfo" class="mu">-</div></div>
 <div class="card" id="conninfo" style="display:none"><h2>连接信息</h2><div class="mu">游戏：<code id="connhost"></code></div></div>
 </section>
 
 <section class="view" id="v-plugins">
 <div class="card"><h2>插件管理<span class="sp"></span><button class="g sm" onclick="loadPlugins()">刷新</button></h2>
-<div class="row"><span class="lbl">上传</span><input type="file" id="smxfile" accept=".smx" style="flex:1;min-width:0;padding:6px"><button onclick="uploadSmx()">上传并加载</button></div><div id="smxmsg" class="mu"></div>
-<div id="plugins" style="margin-top:6px"></div>
-<div class="mu" style="margin-top:8px">启用/禁用 = 移动 disabled/ 目录 + 热加载，立即生效；受保护的核心插件不可禁用/删除。删除只能删已禁用的。</div></div>
+<div class="row"><span class="lbl">上传</span><input type="file" id="smxfile" accept=".smx" style="flex:1;min-width:0"><button onclick="uploadSmx()">上传并加载</button></div><div id="smxmsg" class="mu"></div>
+<div id="plugins" style="margin-top:8px"></div>
+<div class="hint">启用/禁用 = 移动 disabled/ 目录 + 热加载，立即生效；受保护的核心插件不可禁用/删除。删除只能删已禁用的。</div></div>
 <div class="card"><h2>SourceMod 运行中的插件（原始列表）</h2><pre id="plugins-raw" style="max-height:44vh">-</pre></div>
 </section>
 
 <section class="view" id="v-accounts">
 <div class="card"><h2>我的账号<span class="sp"></span><span id="me-info" class="mu"></span></h2>
-<div class="row"><input id="me-cur" type="password" placeholder="当前密码" autocomplete="current-password" style="width:130px"><input id="me-new" type="password" placeholder="新密码" autocomplete="new-password" style="width:130px"><input id="me-new2" type="password" placeholder="再输一次新密码" autocomplete="new-password" style="width:130px"><button onclick="changePw()">修改密码</button></div>
+<div class="row"><input id="me-cur" type="password" placeholder="当前密码" autocomplete="current-password" style="width:140px"><input id="me-new" type="password" placeholder="新密码" autocomplete="new-password" style="width:140px"><input id="me-new2" type="password" placeholder="再输一次新密码" autocomplete="new-password" style="width:150px"><button onclick="changePw()">修改密码</button></div>
 <div class="row"><input id="me-steam" placeholder="绑定 Steam（留空 = 解绑）：SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:200px"><button onclick="bindSteam()">保存绑定</button></div>
-<div class="mu">改密码后其他设备上的登录会失效；绑定 Steam 后会写入游戏管理员（admins_simple.ini 的面板托管块）并热重载。</div></div>
+<div class="hint">改密码后其他设备上的登录会失效；绑定 Steam 后会写入游戏管理员（admins_simple.ini 的面板托管块）并热重载。</div></div>
 <div class="card" data-owner style="display:none"><h2>面板账号<span class="sp"></span><button class="g sm" onclick="loadAccounts()">刷新</button></h2>
-<div class="mu" style="margin-bottom:8px">owner 可管理账号。绑定 SteamID 后，该账号会自动写入游戏管理员（admins_simple.ini 的面板托管块）并热重载，一处管两边。</div>
-<table id="accounts"></table></div>
+<div class="hint" style="margin:0 0 10px">owner 可管理账号。绑定 SteamID 后，该账号会自动写入游戏管理员（admins_simple.ini 的面板托管块）并热重载，一处管两边。</div>
+<div class="tw"><table id="accounts"></table></div></div>
 <div class="card" data-owner style="display:none"><h2>新建账号</h2>
-<div class="row"><input id="na-user" placeholder="用户名" style="width:130px"><input id="na-pw" type="password" placeholder="密码" style="width:130px"><select id="na-role" style="width:90px"><option value="admin">admin</option><option value="owner">owner</option></select></div>
-<div class="row"><input id="na-steam" placeholder="绑定 Steam（可空）：SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:200px"><input id="na-flags" value="99:z" style="width:80px"><button onclick="createAccount()">创建</button></div>
-<div class="mu">绑定 Steam 支持：<code>STEAM_1:1:xxx</code>、<code>[U:1:xxx]</code>、17 位好友码、<code>steamcommunity.com/profiles/…</code> 或 <code>/id/自定义名</code>（自定义名需服务器能连 steamcommunity）。权限位：<code>z</code>=全部管理员权限，前面的数字是免疫等级；留空默认 <code>99:z</code>。</div></div>
+<div class="row"><input id="na-user" placeholder="用户名" style="width:140px"><input id="na-pw" type="password" placeholder="密码" style="width:140px"><select id="na-role" style="width:96px"><option value="admin">admin</option><option value="owner">owner</option></select></div>
+<div class="row"><input id="na-steam" placeholder="绑定 Steam（可空）：SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:200px"><input id="na-flags" value="99:z" style="width:86px"><button onclick="createAccount()">创建</button></div>
+<div class="hint">绑定 Steam 支持：<code>STEAM_1:1:xxx</code>、<code>[U:1:xxx]</code>、17 位好友码、<code>steamcommunity.com/profiles/…</code> 或 <code>/id/自定义名</code>（自定义名需服务器能连 steamcommunity）。权限位：<code>z</code>=全部管理员权限，前面的数字是免疫等级；留空默认 <code>99:z</code>。</div></div>
 </section>
-</div></div>
+</div></div></div>
 <div id="toast"></div>
-<script>
+"""
+JS = r"""
 const MAPS=%MAPS%;let curlog='console',hist=[];
 const TITLES={overview:'概览',players:'玩家 / 白名单',game:'游戏设置',maps:'地图 / 战役',plugins:'插件',console:'控制台',logs:'日志 / 性能',server:'服务器',accounts:'账号'};
+const EYEBROW={overview:'Overview',players:'Players · Whitelist',game:'Game settings',maps:'Maps · Campaigns',plugins:'SourceMod plugins',console:'RCON console',logs:'Logs · Perf',server:'Server',accounts:'Accounts'};
+const DIFF={easy:'简单',normal:'普通',hard:'高级',impossible:'专家'};
 let myRole='admin';
-function nav(v){document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));document.querySelectorAll('#side nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));set('vtitle',TITLES[v]||v);try{localStorage.setItem('l4d2view',v)}catch(e){}if(v==='logs')logs(curlog);if(v==='overview')perf();if(v==='maps')loadAddons();if(v==='plugins')loadPlugins();if(v==='accounts'){loadMe();if(myRole==='owner')loadAccounts()}}
+function nav(v){if(!TITLES[v])v='overview';document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));document.querySelectorAll('#side nav button').forEach(b=>{const on=b.dataset.v===v;b.classList.toggle('on',on);if(on)b.scrollIntoView({block:'nearest',inline:'nearest'})});set('vtitle',TITLES[v]);set('veyebrow',EYEBROW[v]);try{localStorage.setItem('l4d2view',v)}catch(e){}try{history.replaceState(null,'','#'+v)}catch(e){}if(v==='logs')logs(curlog);if(v==='overview')perf();if(v==='maps')loadAddons();if(v==='plugins')loadPlugins();if(v==='accounts'){loadMe();if(myRole==='owner')loadAccounts()}}
+addEventListener('hashchange',()=>{const v=location.hash.slice(1);if(TITLES[v]&&!document.getElementById('v-'+v).classList.contains('on'))nav(v)});
 
-function toast(t,bad){const e=document.getElementById('toast');e.textContent=t;e.style.borderColor=bad?'var(--bad)':'var(--bd)';e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),2800)}
+function toast(t,bad){const e=document.getElementById('toast');e.textContent=t;e.classList.toggle('bad',!!bad);e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),2800)}
 async function api(p,o){const r=await fetch(p,o?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}:{});if(r.status===401){show(false);throw new Error('未登录')}const j=await r.json();if(j.error)throw new Error(j.error);return j}
 function short(t){t=String(t||'').replace(/\s+/g,' ').trim();return t.length>140?t.slice(0,140)+'…':t}
 async function run(p,o,okmsg){try{const j=await api(p,o);toast(okmsg||short(j.out)||'完成');return j}catch(e){toast(e.message,true);throw e}}
-function show(on){document.getElementById('login').style.display=on?'none':'';document.getElementById('app').style.display=on?'':'none';if(on)document.getElementById('setup').style.display='none'}
-function showSetup(u){document.getElementById('login').style.display='none';document.getElementById('app').style.display='none';document.getElementById('setup').style.display='';document.getElementById('su-user').textContent=u||'admin'}
+function show(on){document.getElementById('login').style.display=on?'none':'';document.getElementById('shell').style.display=on?'':'none';document.getElementById('setup').style.display='none'}
+function showSetup(u){document.getElementById('login').style.display='none';document.getElementById('shell').style.display='none';document.getElementById('setup').style.display='';document.getElementById('su-user').textContent=u||'admin'}
 async function setup(){const pw=document.getElementById('su-pw').value,pw2=document.getElementById('su-pw2').value,m=document.getElementById('sumsg');if(pw.length<4){m.textContent='密码至少 4 位';return}if(pw!==pw2){m.textContent='两次输入不一致';return}try{await api('/api/setup',{password:pw});show(true);boot()}catch(e){m.textContent=e.message}}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function login(){try{await api('/api/login',{username:document.getElementById('user').value.trim(),password:document.getElementById('pw').value});try{await api('/api/status')}catch(e){document.getElementById('lmsg').textContent='登录成功，但浏览器没有保存登录状态：请清除本站 cookie 后重试';return}show(true);boot()}catch(e){document.getElementById('lmsg').textContent=e.message}}
 async function logout(){await api('/api/logout',{});show(false)}
 function set(id,v){document.getElementById(id).textContent=v}
 async function status(){try{const s=await api('/api/status');const sys=s.sys||{};const pill=document.getElementById('pill');pill.className='pill '+(s.online?'on':'off');pill.lastElementChild.textContent=s.online?'在线':(s.srcds?'进程在，游戏未响应':'离线');
-set('t-players',s.online?`${s.players} / ${s.max}`:'-');set('t-bots',s.online?`bot ${s.bots}`:'');set('t-map',s.online?s.map:'-');set('t-name',s.online?s.name:'');set('t-preset',s.preset||'-');set('t-diff','难度 '+({easy:'简单',normal:'普通',hard:'高级',impossible:'专家'}[s.difficulty]||'-')+' · 白名单'+(s.whitelist===null?'?':s.whitelist?'开':'关'));set('sysinfo',sys.load?`负载 ${sys.load} ｜ 内存 ${sys.mem_used_mb}/${sys.mem_total_mb} MB ｜ 系统已运行 ${sys.uptime_h} h ｜ 游戏进程 ${s.srcds?'运行中':'未运行'}`:'-');
+set('side-map',s.online?s.map:'—');set('side-players',s.online?`${s.players} / ${s.max}`:'—');
+set('t-players',s.online?`${s.players} / ${s.max}`:'-');set('t-bots',s.online?`bot ${s.bots}`:'');set('t-map',s.online?s.map:'-');set('t-name',s.online?s.name:'');set('t-preset',s.preset||'-');set('t-diff','难度 '+(DIFF[s.difficulty]||'-')+' · 白名单'+(s.whitelist===null?'?':s.whitelist?'开':'关'));set('sysinfo',sys.load?`负载 ${sys.load} ｜ 内存 ${sys.mem_used_mb}/${sys.mem_total_mb} MB ｜ 系统已运行 ${sys.uptime_h} h ｜ 游戏进程 ${s.srcds?'运行中':'未运行'}`:'-');
 document.querySelectorAll('#seg-preset button').forEach(b=>b.classList.toggle('on',b.textContent===s.preset));document.querySelectorAll('#seg-diff button').forEach(b=>b.classList.toggle('on',b.dataset.v===s.difficulty));for(const [id,k] of [['dmg-ff','ff'],['dmg-burn','burn']]){const e=document.getElementById(id);if(e&&document.activeElement!==e&&s[k]!=null)e.value=s[k]}
 set('t-fps',s.perf?s.perf.fps:'-');set('t-out',s.perf?s.perf.out_kb+' KB/s':'-');set('t-load',sys.load?sys.load.split(' ')[0]:'-');set('t-mem',sys.mem_used_mb?`内存 ${sys.mem_used_mb}/${sys.mem_total_mb} MB · 已运行 ${sys.uptime_h} h`:'');
-if(s.whitelist!==undefined){wlOn=s.whitelist;renderSw()}if(s.features){document.querySelectorAll('[data-f]').forEach(e=>e.style.display=s.features[e.dataset.f]?'':'none')}if(s.title){set('brand','🧟 '+s.title);document.title=s.title}if(s.display_host){set('sidehost',s.display_host);set('connhost','connect '+s.display_host);document.getElementById('conninfo').style.display=''}if(s.account){const wasOwner=myRole==='owner';myRole=s.account.role;set('who','👤 '+s.account.user+(myRole==='owner'?' · owner':''));document.querySelectorAll('[data-owner]').forEach(e=>e.style.display=myRole==='owner'?'':'none');if(myRole==='owner'&&!wasOwner&&document.getElementById('v-accounts').classList.contains('on'))loadAccounts()}set('ts',new Date().toLocaleTimeString());set('actmsg',(s.action.running?'正在执行 '+s.action.running+'… ':'')+(s.action.last||''))}catch(e){}}
+if(s.whitelist!==undefined){wlOn=s.whitelist;renderSw()}if(s.features){document.querySelectorAll('[data-f]').forEach(e=>e.style.display=s.features[e.dataset.f]?'':'none')}if(s.title){set('brand',s.title);document.title=s.title}if(s.display_host){set('sidehost',s.display_host);document.getElementById('sidefoot').style.display='';set('connhost','connect '+s.display_host);document.getElementById('conninfo').style.display=''}if(s.account){const wasOwner=myRole==='owner';myRole=s.account.role;set('who-name',s.account.user+(myRole==='owner'?' · owner':''));document.querySelectorAll('[data-owner]').forEach(e=>e.style.display=myRole==='owner'?'':'none');if(myRole==='owner'&&!wasOwner&&document.getElementById('v-accounts').classList.contains('on'))loadAccounts()}set('ts',new Date().toLocaleTimeString());set('actmsg',(s.action.running?'正在执行 '+s.action.running+'… ':'')+(s.action.last||''))}catch(e){}}
 async function act(n){const names={restart:'重启',start:'启动',stop:'停止',monitor:'巡检'};if(n!=='monitor'&&!confirm('确定'+names[n]+'服务器？'))return;await run('/api/action',{name:n},'已开始'+names[n]);setTimeout(status,2000);setTimeout(status,20000)}
 async function preset(n){await run('/api/preset',{name:n},'特感预设已切换为 '+n);status()}
 async function damage(){const o={};for(const [id,k] of [['dmg-ff','ff'],['dmg-burn','burn']]){const v=document.getElementById(id).value;if(v!=='')o[k]=+v}if(!Object.keys(o).length){toast('请填写至少一项',true);return}const j=await run('/api/damage',o,'伤害已更新'+(o.ff!=null?'：友伤 '+o.ff:'')+(o.burn!=null?'，火焰 '+o.burn:''));if(j&&j.persisted===false)toast('已生效，但 server.cfg 未写入（看控制台输出）',true);status()}
-async function diff(l){await run('/api/difficulty',{level:l},'难度已设为 '+({easy:'简单',normal:'普通',hard:'高级',impossible:'专家'}[l])+'，即时生效');status()}
+async function diff(l){await run('/api/difficulty',{level:l},'难度已设为 '+DIFF[l]+'，即时生效');status()}
 async function changemap(){const m=document.getElementById('map').value;if(!confirm('切换到 '+m+'？当前进度会丢失'))return;await run('/api/map',{map:m},'切换中…');setTimeout(status,8000)}
 function renderTargets(pl){const sel=document.getElementById('ptarget'),cur=sel.value;sel.innerHTML='<option value="@all">全体在线玩家'+(pl.length?'（'+pl.length+' 人）':'')+'</option>'+pl.map(p=>`<option value="#${p.userid}">${esc(p.name)}</option>`).join('')+'<option value="__custom">手动输入…</option>';if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function points(){const sel=document.getElementById('ptarget');let t=sel.value,label=sel.options[sel.selectedIndex].textContent;if(t==='__custom'){t=document.getElementById('pcustom').value.trim();label=t;if(!t){toast('请输入玩家名或 #userid',true);return}}const a=+document.getElementById('pamount').value;if(!a){toast('请输入分数',true);return}await run('/api/points',{target:t,amount:a},`已给 ${label} 发 ${a} 分`)}
-let wlOn=null;function renderSw(){const sw=document.getElementById('sw-wl');sw.className='sw'+(wlOn===null?' dis':wlOn?' on':'');set('wl-state',wlOn===null?'未知（服务器离线）':wlOn?'已开启：仅名单内可进':'已关闭：所有人可进')}
+let wlOn=null;function renderSw(){const sw=document.getElementById('sw-wl');sw.className='sw'+(wlOn===null?' dis':wlOn?' on':'');sw.setAttribute('aria-pressed',wlOn?'true':'false');set('wl-state',wlOn===null?'未知（服务器离线）':wlOn?'已开启：仅名单内可进':'已关闭：所有人可进')}
 async function wlToggle(){if(wlOn===null)return;const v=!wlOn;if(!v&&!confirm('关闭白名单后任何人都能进服，确定？'))return;await run('/api/whitelist_enable',{enable:v},v?'白名单已开启':'白名单已关闭，现在所有人可进');wlOn=v;renderSw()}
-async function loadPlayers(){try{const d=await api('/api/players');renderTargets(d.players);const mini=document.getElementById('players-mini');mini.innerHTML='<tr><th>名字</th><th>在线</th><th>延迟</th></tr>'+(d.players.length?d.players.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.time)}</td><td>${esc(p.ping)} ms</td></tr>`).join(''):'<tr><td colspan=3 class="mu">当前没有玩家</td></tr>');const t=document.getElementById('players');t.innerHTML='<tr><th>名字</th><th>SteamID</th><th>在线</th><th>延迟</th><th></th></tr>'+(d.players.length?d.players.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td><code class="mu">${esc(p.steamid)}</code></td><td>${esc(p.time)}</td><td>${esc(p.ping)} ms</td><td style="white-space:nowrap;text-align:right">
+async function loadPlayers(){try{const d=await api('/api/players');renderTargets(d.players);const mini=document.getElementById('players-mini');mini.innerHTML='<tr><th>名字</th><th>在线</th><th>延迟</th></tr>'+(d.players.length?d.players.map(p=>`<tr><td>${esc(p.name)}</td><td class="mu">${esc(p.time)}</td><td class="mu">${esc(p.ping)} ms</td></tr>`).join(''):'<tr><td colspan=3 class="mu">当前没有玩家</td></tr>');const t=document.getElementById('players');t.innerHTML='<tr><th>名字</th><th>SteamID</th><th>在线</th><th>延迟</th><th></th></tr>'+(d.players.length?d.players.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td><code class="mu">${esc(p.steamid)}</code></td><td class="mu">${esc(p.time)}</td><td class="mu">${esc(p.ping)} ms</td><td class="act">
 <button class="g sm" onclick="givep('${esc(p.name)}')">发分</button> <button class="g sm" onclick="wladd('${esc(p.steamid)}','${esc(p.name)}')">加白</button> <button class="d sm" onclick="kick(${p.userid},'${esc(p.name)}')">踢</button></td></tr>`).join(''):'<tr><td colspan=5 class="mu">当前没有玩家</td></tr>')}catch(e){}}
 async function givep(n){const a=prompt('给 '+n+' 发多少分？','200');if(a)await run('/api/points',{target:n,amount:+a},'已发放')}
 async function wladd(id,n){await run('/api/whitelist',{op:'add',steamid:id,note:n},'已加入白名单：'+n);loadWl()}
@@ -1083,14 +1185,17 @@ function renderWl(l){set('wlcount',l.length?l.length+' 人':'空 = 对所有人�
 async function loadWl(){try{renderWl((await api('/api/whitelist')).list)}catch(e){}}
 async function rcon(){const i=document.getElementById('cmd'),c=i.value.trim();if(!c)return;hist.push(c);i.value='';try{document.getElementById('rout').textContent='> '+c+'\n'+((await api('/api/rcon',{cmd:c})).out||'(无输出)')}catch(e){document.getElementById('rout').textContent='错误: '+e.message}}
 async function logs(k,btn){curlog=k;if(btn){document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('on'));btn.classList.add('on')}try{const d=await api('/api/logs?'+k);const p=document.getElementById('logs');p.textContent=d.lines.join('\n')||'(空)';p.scrollTop=p.scrollHeight}catch(e){}}
-function spark(id,vals,color,min,max){const c=document.getElementById(id),dpr=devicePixelRatio||1;c.width=c.clientWidth*dpr;c.height=56*dpr;const x=c.getContext('2d');x.scale(dpr,dpr);const w=c.clientWidth,h=56;x.clearRect(0,0,w,h);if(!vals.length){x.fillStyle='#8a9bb0';x.font='12px sans-serif';x.fillText('暂无采样（有玩家在线时每 15 秒记录一次）',6,32);return}
-const lo=min??Math.min(...vals),hi=max??Math.max(...vals),rng=(hi-lo)||1;x.beginPath();vals.forEach((v,i)=>{const px=i/(vals.length-1||1)*(w-50)+42,py=h-6-(v-lo)/rng*(h-14);i?x.lineTo(px,py):x.moveTo(px,py)});x.strokeStyle=color;x.lineWidth=2;x.stroke();x.fillStyle='#8a9bb0';x.font='11px sans-serif';x.textAlign='right';x.fillText(hi.toFixed(1),38,12);x.fillText(lo.toFixed(1),38,h-3);x.textAlign='left';x.fillStyle=color;x.font='bold 12px sans-serif';const last=vals[vals.length-1];x.fillText(last.toFixed(1),w-44,h-6-(last-lo)/rng*(h-14)+4)}
-async function perf(){try{const d=await api('/api/logs?perfjson');spark('c-fps',d.rows.map(r=>r.fps),'#3ddc97',0,32);spark('c-out',d.rows.map(r=>r.out_kb),'#4f8cff',0,null)}catch(e){}}
+function spark(id,vals,color,min,max){const el=document.getElementById(id),w=el.clientWidth||600,h=64;if(!vals.length){el.setAttribute('viewBox',`0 0 ${w} ${h}`);el.innerHTML='<text x="6" y="36">暂无采样（有玩家在线时每 15 秒记录一次）</text>';return}
+const lo=min??Math.min(...vals),hi=max??Math.max(...vals),rng=(hi-lo)||1,L=44,R=50,px=i=>L+i/(vals.length-1||1)*(w-L-R),py=v=>h-8-(v-lo)/rng*(h-18);const pts=vals.map((v,i)=>px(i).toFixed(1)+','+py(v).toFixed(1)).join(' '),last=vals[vals.length-1];
+el.setAttribute('viewBox',`0 0 ${w} ${h}`);el.innerHTML=`<polygon class="ar" fill="${color}" points="${px(0).toFixed(1)},${h-8} ${pts} ${px(vals.length-1).toFixed(1)},${h-8}"/><polyline class="ln" stroke="${color}" points="${pts}"/><text x="${L-6}" y="12" text-anchor="end">${hi.toFixed(1)}</text><text x="${L-6}" y="${h-4}" text-anchor="end">${lo.toFixed(1)}</text><text class="last" x="${w-R+6}" y="${(py(last)+4).toFixed(1)}" style="fill:${color}">${last.toFixed(1)}</text>`}
+let perfRows=[],perfT;function drawPerf(){spark('c-fps',perfRows.map(r=>r.fps),'#5ed389',0,32);spark('c-out',perfRows.map(r=>r.out_kb),'#f0a13a',0,null)}
+async function perf(){try{perfRows=(await api('/api/logs?perfjson')).rows;drawPerf()}catch(e){}}
+addEventListener('resize',()=>{clearTimeout(perfT);perfT=setTimeout(drawPerf,150)});   // sparklines are sized to the card: redraw when the layout changes
 
-function fmtJob(j){return j.state==='running'?'⏳ '+j.msg:j.state==='done'?'✅ '+j.msg:'❌ '+j.msg}
+function jobRow(label,j,extra,bar){return `<div class="job ${esc(j.state)}"><div class="jr"><i></i><span>${label}：${esc(j.msg)}</span>${extra||''}</div>${bar||''}</div>`}
 async function loadAddons(){try{const d=await api('/api/addons');const el=document.getElementById('addons');
-const jobs=Object.entries(d.jobs||{}).map(([id,j])=>`<div class="mu">工坊 ${id}: ${esc(fmtJob(j))}${j.state==='running'?` <button class="g sm" onclick="wsCancel('${id}')">取消</button>`:''}${j.state==='running'&&j.total?`<div class="bar"><i style="width:${Math.min(100,Math.round(100*(j.done||0)/j.total))}%"></i></div>`:''}</div>`).join('')+Object.entries(d.zips||{}).map(([t,j])=>`<div class="mu">打包: ${esc(fmtJob(j))}${j.state==='done'?` — <a href="/api/download?token=${t}">下载 ${esc(j.name)}（${j.size_mb} MB）</a>`:''}</div>`).join('');
-el.innerHTML=jobs+(d.addons.length?'<table><tr><th>文件</th><th>地图</th><th>大小</th><th></th></tr>'+d.addons.map(a=>`<tr><td><b>${esc(a.name)}</b>${a.mission?'<div class="mu">'+esc(a.mission)+'</div>':''}</td><td class="mu">${a.maps.length?a.maps.length+' 张：'+esc(a.maps.slice(0,3).join(', '))+(a.maps.length>3?'…':''):'—'}</td><td>${a.size_mb} MB</td><td style="white-space:nowrap;text-align:right">${a.maps.length?`<button class="sm" onclick="gomap('${esc(a.maps[0])}')">切到第一章</button> `:''}<button class="g sm" onclick="zipAddon('${esc(a.name)}')">打包下载</button> ${a.protected?'':`<button class="d sm" onclick="delAddon('${esc(a.name)}')">删除</button>`}</td></tr>`).join('')+'</table>':'<div class="mu">还没有自定义战役</div>');
+const jobs=Object.entries(d.jobs||{}).map(([id,j])=>jobRow('工坊 '+id,j,j.state==='running'?`<button class="g sm" onclick="wsCancel('${id}')">取消</button>`:'',j.state==='running'&&j.total?`<div class="bar"><span style="width:${Math.min(100,Math.round(100*(j.done||0)/j.total))}%"></span></div>`:'')).join('')+Object.entries(d.zips||{}).map(([t,j])=>jobRow('打包',j,j.state==='done'?` — <a href="/api/download?token=${t}">下载 ${esc(j.name)}（${j.size_mb} MB）</a>`:'')).join('');
+el.innerHTML=jobs+(d.addons.length?'<div class="tw"><table><tr><th>文件</th><th>地图</th><th>大小</th><th></th></tr>'+d.addons.map(a=>`<tr><td><b>${esc(a.name)}</b>${a.mission?'<div class="mu">'+esc(a.mission)+'</div>':''}</td><td class="mu">${a.maps.length?a.maps.length+' 张：'+esc(a.maps.slice(0,3).join(', '))+(a.maps.length>3?'…':''):'—'}</td><td class="mu">${a.size_mb} MB</td><td class="act">${a.maps.length?`<button class="sm" onclick="gomap('${esc(a.maps[0])}')">切到第一章</button> `:''}<button class="g sm" onclick="zipAddon('${esc(a.name)}')">打包下载</button> ${a.protected?'':`<button class="d sm" onclick="delAddon('${esc(a.name)}')">删除</button>`}</td></tr>`).join('')+'</table></div>':'<div class="mu">还没有自定义战役</div>');
 const sel=document.getElementById('map');const cur=sel.value;sel.innerHTML=MAPS.map(m=>`<option value="${m[0]}">${m[1]} · ${m[0]}</option>`).join('')+d.addons.filter(a=>a.maps.length).map(a=>`<optgroup label="${esc(a.name)}">`+a.maps.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')+'</optgroup>').join('');if([...sel.options].some(o=>o.value===cur))sel.value=cur;
 if(Object.values(d.jobs||{}).some(j=>j.state==='running')||Object.values(d.zips||{}).some(j=>j.state==='running'))setTimeout(loadAddons,3000)}catch(e){}}
 async function gomap(m){if(!confirm('切换到 '+m+'？当前进度会丢失'))return;await run('/api/map',{map:m},'切换中…');setTimeout(status,8000)}
@@ -1099,7 +1204,7 @@ async function zipAddon(name){try{const r=await api('/api/addons',{op:'zip',name
 async function pollZip(token){for(let i=0;i<200;i++){await new Promise(r=>setTimeout(r,1500));let d;try{d=await api('/api/addons')}catch(e){return}const j=(d.zips||{})[token];if(!j||j.state==='running')continue;loadAddons();if(j.state==='done'){toast('打包完成，开始下载');window.location='/api/download?token='+token}else toast('打包失败: '+j.msg,true);return}}
 async function loadPlugins(){try{renderPlugins(await api('/api/plugins'))}catch(e){}}
 function renderPlugins(d){const el=document.getElementById('plugins');
-el.innerHTML='<table><tr><th>启用中（plugins/）</th><th></th></tr>'+(d.enabled.length?d.enabled.map(p=>`<tr><td>${esc(p.file)}${p.protected?' <span class="mu">受保护</span>':''}</td><td style="white-space:nowrap;text-align:right"><button class="g sm" data-a="reload" data-f="${esc(p.file)}">重载</button> ${p.protected?'':`<button class="d sm" data-a="disable" data-f="${esc(p.file)}">禁用</button>`}</td></tr>`).join(''):'<tr><td colspan=2 class="mu">没有启用的插件</td></tr>')+'</table>'+(d.disabled.length?'<div class="mu" style="margin:12px 0 4px">已禁用（disabled/）</div><table>'+d.disabled.map(p=>`<tr><td>${esc(p.file)}</td><td style="white-space:nowrap;text-align:right"><button class="sm" data-a="enable" data-f="${esc(p.file)}">启用</button> <button class="d sm" data-a="delete" data-f="${esc(p.file)}">删除</button></td></tr>`).join('')+'</table>':'');
+el.innerHTML='<div class="tw"><table><tr><th>启用中（plugins/）</th><th></th></tr>'+(d.enabled.length?d.enabled.map(p=>`<tr><td><code>${esc(p.file)}</code>${p.protected?' <span class="mu">受保护</span>':''}</td><td class="act"><button class="g sm" data-a="reload" data-f="${esc(p.file)}">重载</button> ${p.protected?'':`<button class="d sm" data-a="disable" data-f="${esc(p.file)}">禁用</button>`}</td></tr>`).join(''):'<tr><td colspan=2 class="mu">没有启用的插件</td></tr>')+'</table></div>'+(d.disabled.length?'<div class="k" style="margin:16px 0 6px">已禁用（disabled/）</div><div class="tw"><table>'+d.disabled.map(p=>`<tr><td><code class="mu">${esc(p.file)}</code></td><td class="act"><button class="sm" data-a="enable" data-f="${esc(p.file)}">启用</button> <button class="d sm" data-a="delete" data-f="${esc(p.file)}">删除</button></td></tr>`).join('')+'</table></div>':'');
 document.getElementById('plugins-raw').textContent=d.raw||'(服务器离线或无输出)';
 el.querySelectorAll('button[data-a]').forEach(b=>b.onclick=()=>pluginAct(b.dataset.a,b.dataset.f));}
 async function pluginAct(op,file){const names={reload:'重载',disable:'禁用',enable:'启用',delete:'删除'};if((op==='disable'||op==='delete')&&!confirm(names[op]+'插件 '+file+'？'))return;try{const d=await api('/api/plugins',{op,file});toast(short(d.out)||names[op]+'完成');renderPlugins(d)}catch(e){toast(e.message,true)}}
@@ -1108,18 +1213,23 @@ async function loadAccounts(){try{renderAccounts(await api('/api/accounts'))}cat
 async function loadMe(){try{const m=await api('/api/me');set('me-info',m.username+' · '+m.role+(m.steamid?' · '+m.steamid:''));document.getElementById('me-steam').value=m.steamid||''}catch(e){}}
 async function changePw(){const cur=document.getElementById('me-cur').value,nw=document.getElementById('me-new').value,nw2=document.getElementById('me-new2').value;if(!cur||!nw){toast('填写当前密码和新密码',true);return}if(nw!==nw2){toast('两次输入的新密码不一致',true);return}try{await run('/api/me',{op:'password',current:cur,password:nw},'密码已修改');for(const id of ['me-cur','me-new','me-new2'])document.getElementById(id).value=''}catch(e){}}
 async function bindSteam(){const v=document.getElementById('me-steam').value.trim();try{await run('/api/me',{op:'steamid',steamid:v},v?'已绑定 Steam':'已解绑');loadMe();if(myRole==='owner')loadAccounts()}catch(e){}}
-function renderAccounts(d){const t=document.getElementById('accounts');t.innerHTML='<tr><th>用户名</th><th>角色</th><th>绑定 SteamID</th><th>权限</th><th>最近登录</th><th></th></tr>'+d.accounts.map(a=>{const last=a.last_login?new Date(a.last_login*1000).toLocaleString():'—';return `<tr><td><b>${esc(a.username)}</b>${a.username===d.me?' <span class="mu">(我)</span>':''}</td><td>${esc(a.role)}</td><td><code class="mu">${esc(a.steamid||'—')}</code></td><td class="mu">${esc(a.flags||'')}</td><td class="mu">${esc(last)}</td><td style="white-space:nowrap;text-align:right"><button class="g sm" data-e="${a.id}">编辑</button> ${a.username===d.me?'':`<button class="d sm" data-x="${a.id}" data-u="${esc(a.username)}">删除</button>`}</td></tr>`}).join('');
+function renderAccounts(d){const t=document.getElementById('accounts');t.innerHTML='<tr><th>用户名</th><th>角色</th><th>绑定 SteamID</th><th>权限</th><th>最近登录</th><th></th></tr>'+d.accounts.map(a=>{const last=a.last_login?new Date(a.last_login*1000).toLocaleString():'—';return `<tr><td><b>${esc(a.username)}</b>${a.username===d.me?' <span class="mu">(我)</span>':''}</td><td>${esc(a.role)}</td><td><code class="mu">${esc(a.steamid||'—')}</code></td><td class="mu">${esc(a.flags||'')}</td><td class="mu">${esc(last)}</td><td class="act"><button class="g sm" data-e="${a.id}">编辑</button> ${a.username===d.me?'':`<button class="d sm" data-x="${a.id}" data-u="${esc(a.username)}">删除</button>`}</td></tr>`}).join('');
 window._accts=d.accounts;t.querySelectorAll('button[data-e]').forEach(b=>b.onclick=()=>editAccount(window._accts.find(a=>a.id==b.dataset.e)));t.querySelectorAll('button[data-x]').forEach(b=>b.onclick=()=>delAccount(b.dataset.x,b.dataset.u));}
 async function createAccount(){const u=document.getElementById('na-user').value.trim(),pw=document.getElementById('na-pw').value,role=document.getElementById('na-role').value,steamid=document.getElementById('na-steam').value.trim(),flags=document.getElementById('na-flags').value.trim();if(!u||!pw){toast('填写用户名和密码',true);return}try{await run('/api/accounts',{op:'create',username:u,password:pw,role,steamid,flags},'已创建账号 '+u);document.getElementById('na-user').value='';document.getElementById('na-pw').value='';document.getElementById('na-steam').value='';loadAccounts()}catch(e){}}
 async function delAccount(id,u){if(!confirm('删除账号 '+u+'？'))return;try{await run('/api/accounts',{op:'delete',id:+id},'已删除 '+u);loadAccounts()}catch(e){}}
 async function editAccount(a){const steamid=prompt('绑定 Steam（留空 = 解绑；绑定后写入游戏管理员）\n支持 SteamID / 主页链接 / 17位好友码：',a.steamid||'');if(steamid===null)return;const pw=prompt('设置新密码（留空 = 不改）：','');if(pw===null)return;const body={op:'update',id:a.id,steamid:steamid.trim()};if(pw)body.password=pw;try{await run('/api/accounts',body,'已保存 '+a.username);loadAccounts()}catch(e){}}
-async function workshop(){const id=document.getElementById('wsid').value.trim();if(!id)return;await run('/api/addons',{op:'workshop',id},'开始下载，完成后自动安装');document.getElementById('wsid').value='';setTimeout(loadAddons,1500)}
 async function wsCancel(id){try{await run('/api/addons',{op:'workshop_cancel',id},'正在取消…');setTimeout(loadAddons,1500)}catch(e){}}
+async function workshop(){const id=document.getElementById('wsid').value.trim();if(!id)return;await run('/api/addons',{op:'workshop',id},'开始下载，完成后自动安装');document.getElementById('wsid').value='';setTimeout(loadAddons,1500)}
 async function upload(){const f=document.getElementById('vpkfile').files[0];if(!f){toast('先选择一个 .vpk 文件',true);return}const m=document.getElementById('upmsg');m.textContent='上传中 '+f.name+' ('+(f.size/1048576).toFixed(1)+' MB)…';
 try{const r=await new Promise((res,rej)=>{const x=new XMLHttpRequest();x.open('POST','/api/upload?name='+encodeURIComponent(f.name));x.upload.onprogress=e=>{if(e.lengthComputable)m.textContent='上传中 '+Math.round(e.loaded/e.total*100)+'% · '+f.name};x.onload=()=>res(JSON.parse(x.responseText));x.onerror=()=>rej(new Error('网络错误'));x.send(f)});if(r.error)throw new Error(r.error);m.textContent='已安装 '+r.addon.name+'（'+r.addon.maps.length+' 张地图）';toast('上传完成');loadAddons()}catch(e){m.textContent='失败: '+e.message;toast(e.message,true)}}
-function boot(){document.getElementById('map').innerHTML=MAPS.map(m=>`<option value="${m[0]}">${m[1]} · ${m[0]}</option>`).join('');let v='overview';try{v=localStorage.getItem('l4d2view')||v}catch(e){}nav(v);status();loadPlayers();loadWl();loadAddons();logs('console');perf();setInterval(status,10000);setInterval(loadPlayers,30000);setInterval(perf,60000)}
+function boot(){document.getElementById('map').innerHTML=MAPS.map(m=>`<option value="${m[0]}">${m[1]} · ${m[0]}</option>`).join('');let v=location.hash.slice(1);if(!TITLES[v]){v='overview';try{v=localStorage.getItem('l4d2view')||v}catch(e){}}nav(v);status();loadPlayers();loadWl();loadAddons();logs('console');perf();setInterval(status,10000);setInterval(loadPlayers,30000);setInterval(perf,60000)}
 (async()=>{try{await api('/api/status');show(true);boot()}catch(e){try{const s=await (await fetch('/api/setup')).json();if(s.needed){showSetup(s.username);return}}catch(e2){}show(false)}})();
-</script></div></body></html>""".replace('%MAPS%', json.dumps(MAPS, ensure_ascii=False))
+"""
+PAGE = ('<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>L4D2 Ops Panel</title>'
+        '<link rel="icon" href="data:image/svg+xml,' + quote(MARK) + '">'
+        # webfonts are progressive enhancement: loaded without blocking rendering, the CSS font stacks cover the rest
+        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" media="print" onload="this.media=\'all\'">'
+        '<style>' + CSS + '</style></head><body>' + BODY + '<script>' + JS + '</script></body></html>').replace('%MAPS%', json.dumps(MAPS, ensure_ascii=False))
 
 if __name__ == '__main__':
     port = int(CONF['port']); bind = CONF['bind']
