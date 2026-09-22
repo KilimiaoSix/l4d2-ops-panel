@@ -5,9 +5,11 @@ Talks to the game over RCON / A2S, optionally drives LinuxGSM for start/stop, re
 manages custom campaigns (upload / Steam Workshop download) and integrates with a few SourceMod plugins
 when they are present (Private Whitelist, SI Preset, Points System). Everything is configured in panel.json.
 """
-import json, os, re, ssl, socket, struct, subprocess, threading, time, secrets, sys, glob
+import shutil
+import json, os, re, ssl, socket, struct, subprocess, threading, time, secrets, sys, glob, sqlite3, hashlib, hmac, zipfile
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, quote
+from contextlib import closing
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 CONF_PATH = os.environ.get('L4D2PANEL_CONFIG') or (sys.argv[sys.argv.index('--config') + 1] if '--config' in sys.argv else os.path.join(DIR, 'panel.json'))
@@ -21,6 +23,9 @@ DEFAULTS = {
     'depotdownloader': '/home/l4d2server/tools/depotdownloader/DepotDownloader',
     'panel_title': 'L4D2 运维面板', 'display_host': '', 'max_upload_mb': 3072,
     'protected_addons': ['admin_system.vpk'],
+    'db': 'panel.db', 'bootstrap_user': 'admin',
+    'protected_plugins': ['sourcemod', 'basecommands', 'basetriggers', 'basechat', 'admin-flatfile', 'adminmenu',
+                          'sm_whitelist', 'sipreset', 'ps_mapreset', 'l4d2_points_system'],
 }
 CONF = dict(DEFAULTS)
 try:
@@ -34,6 +39,12 @@ GAME = CONF['game_dir']
 CONSOLE_LOG = CONF['console_log']; PERF_CSV = CONF['perf_csv']
 WHITELIST = os.path.join(GAME, 'addons', 'sourcemod', 'configs', 'whitelist.txt')
 SM_LOGS = os.path.join(GAME, 'addons', 'sourcemod', 'logs')
+SM_PLUGINS = os.path.join(GAME, 'addons', 'sourcemod', 'plugins')
+SM_DISABLED = os.path.join(SM_PLUGINS, 'disabled')
+ADMINS_INI = os.path.join(GAME, 'addons', 'sourcemod', 'configs', 'admins_simple.ini')
+DB_PATH = _abs(CONF.get('db', 'panel.db'))
+DL_DIR = os.path.join(DIR, 'downloads')
+PROTECT_PLUGINS = set(CONF.get('protected_plugins', []))
 ANSI = re.compile(r'\x1b\[[0-9;]*m')
 MAPS = [('c1m1_hotel','1 死亡中心'),('c2m1_highway','2 黑色狂欢节'),('c3m1_plankcountry','3 沼泽激战'),('c4m1_milltown_a','4 暴风骤雨'),
         ('c5m1_waterfront','5 教区'),('c6m1_riverbank','6 牺牲'),('c7m1_docks','7 短暂时刻'),('c8m1_apartment','8 毫不留情'),
@@ -57,9 +68,15 @@ class Rcon:
     @staticmethod
     def _recv(s):
         raw = b''
-        while len(raw) < 4: raw += s.recv(4 - len(raw))
+        while len(raw) < 4:
+            c = s.recv(4 - len(raw))
+            if not c: raise ConnectionError('RCON connection closed')   # (2026-09-19) was an infinite spin holding the lock when the peer closed
+            raw += c
         n = struct.unpack('<i', raw)[0]; d = b''
-        while len(d) < n: d += s.recv(n - len(d))
+        while len(d) < n:
+            c = s.recv(n - len(d))
+            if not c: raise ConnectionError('RCON connection closed')
+            d += c
         i, t = struct.unpack('<ii', d[:8]); return i, t, d[8:-2].decode('utf-8', 'replace')
     @classmethod
     def run(cls, cmd, timeout=6):
@@ -83,8 +100,8 @@ class Rcon:
         lines = [l for l in out.splitlines() if l.strip() and not noise.match(l.strip())]
         return '\n'.join(lines).strip()
 
-def a2s():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.settimeout(2)
+def _a2s_once(timeout=1.5):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.settimeout(timeout)
     req = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
     try:
         addr = (CONF['rcon_host'], int(CONF['rcon_port']))
@@ -93,11 +110,23 @@ def a2s():
         p = 6; f = []
         for _ in range(4):
             e = d.index(b'\x00', p); f.append(d[p:e].decode('utf-8', 'replace')); p = e + 1
+        A2S_CACHE.update(name=f[0], map=f[1], max=d[p+3])
         return {'online': True, 'name': f[0], 'map': f[1], 'players': d[p+2], 'max': d[p+3], 'bots': d[p+4]}
-    except Exception:
-        return {'online': False}
     finally:
         s.close()
+
+A2S_CACHE = {}
+def a2s():
+    # (2026-09-19) L4D2 rate-limits A2S; a public server is scanned constantly, so a single
+    # query often lands in a throttled window and times out -> the panel used to cry
+    # "游戏未响应" while the game was fine. Retry a few times; the status handler additionally
+    # falls back to RCON when this still fails.
+    for i in range(3):
+        try:
+            return _a2s_once(1.5)
+        except Exception:
+            if i < 2: time.sleep(0.35)
+    return {'online': False}
 
 def tail(path, n):
     try:
@@ -243,30 +272,239 @@ def features(online):
         FEAT['t'] = now; FEAT['v'] = f
     return f
 
-SESS_PATH = os.path.join(DIR, 'sessions.json')
-def _load_sessions():
+# ---- SQLite: panel accounts / sessions / audit (2026-09-19) ----
+DB_LOCK = threading.Lock()
+def db():
+    c = sqlite3.connect(DB_PATH, timeout=10, isolation_level=None)   # autocommit; DB_LOCK serialises writers
+    c.row_factory = sqlite3.Row
+    try: c.execute('PRAGMA journal_mode=WAL')
+    except Exception: pass
+    return c
+def hash_pw(pw, salt=None, it=200000):
+    salt = salt or secrets.token_hex(16)
+    return f'pbkdf2${it}${salt}$' + hashlib.pbkdf2_hmac('sha256', pw.encode(), bytes.fromhex(salt), it).hex()
+def verify_pw(pw, stored):
     try:
-        d = json.load(open(SESS_PATH)); now = time.time()
-        return {k: v for k, v in d.items() if v > now}
+        _a, it, salt, h = stored.split('$')
+        return hmac.compare_digest(hashlib.pbkdf2_hmac('sha256', pw.encode(), bytes.fromhex(salt), int(it)).hex(), h)
     except Exception:
-        return {}
-def _save_sessions():
+        return False
+def db_init():
+    with DB_LOCK, closing(db()) as c:
+        c.executescript('''
+        CREATE TABLE IF NOT EXISTS accounts(id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, pass TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'admin', steamid TEXT, flags TEXT DEFAULT '99:z', note TEXT, created INTEGER, last_login INTEGER);
+        CREATE TABLE IF NOT EXISTS sessions(sid TEXT PRIMARY KEY, account_id INTEGER, expires INTEGER);
+        CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, ts INTEGER, who TEXT, action TEXT, detail TEXT);''')
+        if not c.execute('SELECT COUNT(*) FROM accounts').fetchone()[0]:
+            u = CONF.get('bootstrap_user', 'admin')
+            c.execute('INSERT INTO accounts(username,pass,role,created) VALUES(?,?,?,?)', (u, hash_pw(CONF['password']), 'owner', int(time.time())))
+            print(f'[panel] seeded owner account "{u}" from panel.json password (change it in the 账号 tab)', flush=True)
+        c.execute('DELETE FROM sessions WHERE expires<?', (int(time.time()),))
+    try: os.chmod(DB_PATH, 0o600)
+    except Exception: pass
+def audit(who, action, detail=''):
     try:
-        tmp = SESS_PATH + '.tmp'
-        with open(tmp, 'w') as f: json.dump(SESSIONS, f)
-        os.chmod(tmp, 0o600); os.replace(tmp, SESS_PATH)
-    except Exception:
-        pass
-SESSIONS = _load_sessions(); FAILS = {}
+        with DB_LOCK, closing(db()) as c: c.execute('INSERT INTO audit(ts,who,action,detail) VALUES(?,?,?,?)', (int(time.time()), who, action, str(detail)[:400]))
+    except Exception: pass
+def sess_new(account_id):
+    sid = secrets.token_urlsafe(32)
+    with DB_LOCK, closing(db()) as c: c.execute('INSERT INTO sessions(sid,account_id,expires) VALUES(?,?,?)', (sid, account_id, int(time.time()) + int(CONF['session_days']) * 86400))
+    return sid
+def sess_get(h):
+    m = re.search(r'(?:^|;\s*)l4d2panel=([A-Za-z0-9_-]+)', h.headers.get('Cookie', ''))
+    if not m: return None
+    with DB_LOCK, closing(db()) as c:
+        return c.execute('SELECT a.* FROM sessions s JOIN accounts a ON a.id=s.account_id WHERE s.sid=? AND s.expires>?', (m.group(1), int(time.time()))).fetchone()
+def sess_del(h):
+    m = re.search(r'(?:^|;\s*)l4d2panel=([A-Za-z0-9_-]+)', h.headers.get('Cookie', ''))
+    if m:
+        with DB_LOCK, closing(db()) as c: c.execute('DELETE FROM sessions WHERE sid=?', (m.group(1),))
+db_init(); FAILS = {}
 def client_ip(h):
-    return (h.headers.get('X-Forwarded-For', '').split(',')[0].strip() or h.client_address[0])
+    return (h.headers.get('X-Real-IP', '').strip() or h.client_address[0])   # X-Real-IP is set by nginx from $remote_addr
 
-def check_session(h):
-    c = h.headers.get('Cookie', '')
-    m = re.search(r'(?:^|;\s*)l4d2panel=([A-Za-z0-9_-]+)', c)
-    return bool(m and SESSIONS.get(m.group(1), 0) > time.time())
+def check_session(h): return sess_get(h) is not None
 
 def q(s): return '"' + s.replace('"', '') + '"'
+
+# ---- Steam identity parsing: accept SteamID / SteamID3 / SteamID64 / profile URL / vanity ----
+STEAMID64_BASE = 76561197960265728
+def _from_accountid(acc):
+    if acc < 0: raise ValueError('不是有效的 Steam 账号')
+    return f'STEAM_1:{acc & 1}:{acc >> 1}'   # L4D2 reports universe 1; match that
+def resolve_vanity(vanity):
+    import urllib.request
+    try:
+        with urllib.request.urlopen('https://steamcommunity.com/id/' + quote(vanity) + '/?xml=1', timeout=6) as r:
+            m = re.search(r'<steamID64>(\d{17})</steamID64>', r.read().decode('utf-8', 'replace'))
+            return m.group(1) if m else None
+    except Exception:
+        return None
+def parse_steamid(raw):
+    """Return a canonical STEAM_1:Y:Z, or '' for blank input; raise ValueError with a helpful message."""
+    s = str(raw or '').strip()
+    if not s: return ''
+    m = re.fullmatch(r'STEAM_[0-5]:([01]):(\d+)', s, re.I)
+    if m: return f'STEAM_1:{m.group(1)}:{m.group(2)}'
+    m = re.fullmatch(r'\[?U:1:(\d+)\]?', s, re.I)
+    if m: return _from_accountid(int(m.group(1)))
+    u = re.search(r'/profiles/(\d{17})', s)
+    if u: s = u.group(1)
+    if re.fullmatch(r'\d{17}', s): return _from_accountid(int(s) - STEAMID64_BASE)
+    v = re.search(r'/id/([^/?#]+)', s)
+    vanity = v.group(1) if v else (s if re.fullmatch(r'[A-Za-z0-9_.\-]{2,64}', s) else None)
+    if vanity:
+        id64 = resolve_vanity(vanity)
+        if id64: return _from_accountid(int(id64) - STEAMID64_BASE)
+        raise ValueError('无法解析自定义主页链接（服务器可能连不上 steamcommunity.com）；请改用 SteamID、17 位好友码，或 /profiles/数字 链接')
+    raise ValueError('无法识别的 Steam 标识')
+
+# ---- SourceMod admin binding: maintain a panel-owned block in admins_simple.ini ----
+# Markers use // (SourceMod's SMC/KeyValues line-comment); the regex also matches a legacy ; block.
+ADM_BEGIN = '// ==== panel-managed BEGIN (the web panel maintains this block; do not edit inside) ===='
+ADM_END = '// ==== panel-managed END ===='
+ADM_BLOCK_RE = re.compile(r'(?://|;) ==== panel-managed BEGIN.*?(?://|;) ==== panel-managed END[^\n]*', re.S)
+def sync_sm_admins():
+    with DB_LOCK, closing(db()) as c:
+        rows = c.execute("SELECT id,username,steamid,flags FROM accounts WHERE steamid IS NOT NULL AND steamid<>''").fetchall()
+    lines = [ADM_BEGIN]
+    for r in rows:
+        cmt = re.sub(r'[^\x20-\x7e]', '?', r['username'] or '').replace('\\', '')
+        lines.append(f'"{r["steamid"]}" "{r["flags"] or "99:z"}"    // panel#{r["id"]} {cmt}')
+    lines.append(ADM_END)
+    block = '\n'.join(lines)
+    try: txt = open(ADMINS_INI, encoding='utf-8', errors='replace').read()
+    except FileNotFoundError: txt = ''
+    if ADM_BLOCK_RE.search(txt):
+        txt = ADM_BLOCK_RE.sub(lambda _: block, txt, count=1)
+    else:
+        txt = (txt.rstrip() + '\n\n' + block + '\n') if txt.strip() else (block + '\n')
+    tmp = ADMINS_INI + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f: f.write(txt)
+    os.replace(tmp, ADMINS_INI)
+    try: return Rcon.run('sm_reloadadmins') or 'admin cache reloaded'
+    except Exception as e: return f'(已写入，reload 失败: {e})'
+
+# ---- SourceMod plugin manager ----
+def plugin_name(n):
+    n = os.path.basename(str(n)).strip()
+    if n.endswith('.smx'): n = n[:-4]
+    return n if re.match(r'^[\w.\-]+$', n) else None
+def list_plugins():
+    def scan(d):
+        try: return sorted(f for f in os.listdir(d) if f.endswith('.smx'))
+        except FileNotFoundError: return []
+    raw = ''
+    try: raw = Rcon.run('sm plugins list')
+    except Exception: pass
+    return {'enabled': [{'file': f, 'protected': f[:-4] in PROTECT_PLUGINS} for f in scan(SM_PLUGINS)],
+            'disabled': [{'file': f} for f in scan(SM_DISABLED)], 'raw': raw}
+def plugin_action(op, file):
+    nm = plugin_name(file)
+    if not nm: raise ValueError('无效的插件名')
+    fn = nm + '.smx'; en = os.path.join(SM_PLUGINS, fn); di = os.path.join(SM_DISABLED, fn)
+    if op == 'reload':
+        return Rcon.run('sm plugins reload ' + nm)
+    if op == 'disable':
+        if nm in PROTECT_PLUGINS: raise ValueError('该插件受保护，不能禁用')
+        if not os.path.exists(en): raise ValueError('插件不在启用目录')
+        os.makedirs(SM_DISABLED, exist_ok=True)
+        out = ''
+        try: out = Rcon.run('sm plugins unload ' + nm)
+        except Exception: pass
+        os.replace(en, di); return (out + ' — 已移入 disabled/').strip()
+    if op == 'enable':
+        if not os.path.exists(di): raise ValueError('插件不在禁用目录')
+        os.replace(di, en)
+        try: return Rcon.run('sm plugins load ' + nm) + ' — 已启用'
+        except Exception as e: return f'已移入 plugins/，加载失败（换图或重启后生效）: {e}'
+    if op == 'delete':
+        if nm in PROTECT_PLUGINS: raise ValueError('该插件受保护，不能删除')
+        if os.path.exists(di): os.remove(di); return '已删除禁用的插件 ' + fn
+        raise ValueError('只能删除已禁用的插件（先禁用再删）')
+    raise ValueError('bad op')
+
+# ---- addon -> downloadable zip ----
+ZIPS = {}   # token -> {state, msg, ...}
+DLS = {}    # token -> {path, name, expires}
+INSTALL_NOTE = ('把压缩包里的 .vpk 放到 Left 4 Dead 2\\left4dead2\\addons\\ 目录，重启游戏后在“附加组件”里启用即可。\n'
+                '服务器和所有玩家需要装同一个战役才能一起玩。\n')
+def _clean_downloads():
+    now = time.time()
+    for t, v in list(DLS.items()):
+        if v['expires'] < now:
+            try: os.remove(v['path'])
+            except Exception: pass
+            DLS.pop(t, None)
+def zip_job(token, names):
+    ZIPS[token] = {'state': 'running', 'msg': '打包中…'}
+    try:
+        os.makedirs(DL_DIR, exist_ok=True); _clean_downloads()
+        paths = []
+        for n in names:
+            s = safe_vpk_name(n)
+            if s and os.path.isfile(os.path.join(ADDONS, s)): paths.append(os.path.join(ADDONS, s))
+        if not paths: raise RuntimeError('没有有效的 vpk 文件')
+        out = os.path.join(DL_DIR, token + '.zip')
+        with zipfile.ZipFile(out, 'w', zipfile.ZIP_STORED, allowZip64=True) as z:
+            for pth in paths: z.write(pth, os.path.basename(pth))
+            z.writestr('安装说明.txt', INSTALL_NOTE)
+        dlname = (os.path.basename(paths[0])[:-4] if len(paths) == 1 else 'l4d2_addons') + '.zip'
+        DLS[token] = {'path': out, 'name': dlname, 'expires': time.time() + 3600}
+        ZIPS[token] = {'state': 'done', 'msg': '打包完成', 'token': token, 'name': dlname, 'size_mb': round(os.path.getsize(out) / 1048576, 1)}
+    except Exception as e:
+        ZIPS[token] = {'state': 'error', 'msg': str(e)}
+
+# ---- cached game flags (preset / whitelist / difficulty): 15s cache cuts RCON churn and,
+#      crucially, keeps last-good values so one flaky RCON call doesn't blank the tiles ----
+GS = {'t': 0, 'preset': '', 'whitelist': None, 'difficulty': '', 'ff': None, 'burn': None}
+def game_flags(online, fe):
+    if online and time.time() - GS['t'] >= 15:
+        if fe.get('preset'):
+            try:
+                m = re.search(r'当前: (\w+)', Rcon.run('sm_preset'))
+                if m: GS['preset'] = m.group(1)
+            except Exception: pass
+        if fe.get('whitelist'):
+            try:
+                w = re.search(r'"sm_whitelist_enable"[^"]*"(\d)"', Rcon.run('sm_cvar sm_whitelist_enable'))
+                if w: GS['whitelist'] = (w.group(1) == '1')
+            except Exception: pass
+        try:
+            dd = re.search(r'"z_difficulty" = "(\w+)"', Rcon.run('z_difficulty'))
+            if dd: GS['difficulty'] = dd.group(1).lower()
+        except Exception: pass
+        # damage factors: all four difficulty variants are kept equal by /api/damage,
+        # so the expert one is representative whatever the current difficulty is
+        for key, cv in (('ff', 'survivor_friendly_fire_factor_expert'), ('burn', 'survivor_burn_factor_expert')):
+            try:
+                m = re.search(r'"%s" = "([0-9.]+)"' % cv, Rcon.run(cv))
+                if m: GS[key] = float(m.group(1))
+            except Exception: pass
+        GS['t'] = time.time()
+    return {'preset': GS['preset'], 'whitelist': GS['whitelist'], 'difficulty': GS['difficulty'], 'ff': GS['ff'], 'burn': GS['burn']}
+
+DAMAGE_CVARS = {
+    'ff':   ['survivor_friendly_fire_factor_' + d for d in ('easy', 'normal', 'hard', 'expert')],
+    'burn': ['survivor_burn_factor_' + d          for d in ('easy', 'normal', 'hard', 'expert')],
+}
+
+def persist_cvars(pairs):
+    """Write name/value pairs into <game>/cfg/server.cfg so a restart keeps them.
+    Replaces an existing line (with or without the sm_cvar prefix), otherwise appends.
+    Read/written as latin-1 so the round trip is byte-exact whatever the file holds;
+    the lines this adds are pure ASCII (the engine chokes on multibyte characters)."""
+    cfg = os.path.join(GAME, 'cfg', 'server.cfg')
+    text = open(cfg, encoding='latin-1').read()
+    shutil.copy(cfg, cfg + '.bak-panel-' + time.strftime('%Y%m%d-%H%M%S'))
+    for name, val in pairs:
+        line = f'sm_cvar {name} {val}'
+        pat = re.compile(r'^[ \t]*(?:sm_cvar[ \t]+)?' + re.escape(name) + r'[ \t]+\S.*$', re.M)
+        text, n = pat.subn(line, text, count=1)
+        if n == 0:
+            text = text.rstrip('\n') + '\n' + line + '\n'
+    open(cfg, 'w', encoding='latin-1').write(text)
 
 class H(BaseHTTPRequestHandler):
     server_version = 'l4d2panel/1.0'
@@ -286,23 +524,45 @@ class H(BaseHTTPRequestHandler):
         if not check_session(self): return self.send_json({'error': 'auth'}, 401)
         try:
             if p == '/api/status':
-                st = a2s(); st['sys'] = sysinfo(); st['action'] = ACTION; st['srcds'] = subprocess.run(['pgrep', '-f', 'srcds_linux'], capture_output=True).returncode == 0
+                st = a2s(); st['srcds'] = subprocess.run(['pgrep', '-f', 'srcds_linux'], capture_output=True).returncode == 0
+                if not st['online'] and st['srcds']:   # (2026-09-19) A2S throttled but process is up: confirm via RCON instead of reporting "not responding"
+                    try:
+                        pl, raw = players(); humans = [x for x in pl if x['steamid'] != 'BOT']; mm = re.search(r'^map\s*:\s*(\S+)', raw, re.M)
+                        st.update(online=True, degraded=True, name=A2S_CACHE.get('name', CONF['panel_title']), map=(A2S_CACHE.get('map') or (mm.group(1) if mm else '?')), players=len(humans), bots=len(pl) - len(humans), max=A2S_CACHE.get('max', len(pl) or 8))
+                    except Exception: pass
+                st['sys'] = sysinfo(); st['action'] = ACTION
+                ac = sess_get(self); st['account'] = ({'user': ac['username'], 'role': ac['role']} if ac else None)
                 st['features'] = fe = features(st['online']); st['title'] = CONF['panel_title']; st['display_host'] = CONF['display_host']
                 rows = tail(PERF_CSV, 2); c = rows[-1].split(',') if len(rows) > 1 else []
                 st['perf'] = {'t': c[0], 'fps': c[5], 'out_kb': round(float(c[4]) / 1024, 1)} if len(c) >= 7 else None
-                try:
-                    m = re.search(r'当前: (\w+)', Rcon.run('sm_preset')) if (st['online'] and fe['preset']) else None
-                    st['preset'] = m.group(1) if m else ''
-                    w = re.search(r'"sm_whitelist_enable"[^"]*"(\d)"', Rcon.run('sm_cvar sm_whitelist_enable')) if (st['online'] and fe['whitelist']) else None
-                    st['whitelist'] = (w.group(1) == '1') if w else None
-                    dd = re.search(r'"z_difficulty" = "(\w+)"', Rcon.run('z_difficulty')) if st['online'] else None
-                    st['difficulty'] = dd.group(1).lower() if dd else ''
-                except Exception: st['preset'] = ''; st['whitelist'] = None
+                st.update(game_flags(st['online'], fe))
                 return self.send_json(st)
             if p == '/api/players':
                 pl, raw = players(); return self.send_json({'players': pl, 'raw': raw})
             if p == '/api/whitelist': return self.send_json({'list': read_whitelist()})
-            if p == '/api/addons': return self.send_json({'addons': list_addons(), 'jobs': JOBS})
+            if p == '/api/addons': return self.send_json({'addons': list_addons(), 'jobs': JOBS, 'zips': ZIPS})
+            if p == '/api/plugins': return self.send_json(list_plugins())
+            if p == '/api/accounts':
+                ac = sess_get(self)
+                if not ac or ac['role'] != 'owner': return self.send_json({'error': '需要 owner 权限'}, 403)
+                with DB_LOCK, closing(db()) as c:
+                    rows = c.execute('SELECT id,username,role,steamid,flags,note,created,last_login FROM accounts ORDER BY id').fetchall()
+                return self.send_json({'accounts': [dict(r) for r in rows], 'me': ac['username']})
+            if p == '/api/download':
+                _clean_downloads(); tok = urlparse(self.path).query.replace('token=', '')
+                info = DLS.get(tok)
+                if not info or not os.path.isfile(info['path']): return self.send_json({'error': '下载链接已过期，请重新打包'}, 404)
+                self.send_response(200); self.send_header('Content-Type', 'application/zip')
+                self.send_header('Content-Length', str(os.path.getsize(info['path'])))
+                self.send_header('Content-Disposition', "attachment; filename*=UTF-8''" + quote(info['name']))
+                self.end_headers()
+                with open(info['path'], 'rb') as f:
+                    while True:
+                        chunk = f.read(262144)
+                        if not chunk: break
+                        try: self.wfile.write(chunk)
+                        except Exception: break
+                return
             if p == '/api/logs':
                 kind = urlparse(self.path).query
                 if kind == 'errors':
@@ -321,19 +581,24 @@ class H(BaseHTTPRequestHandler):
         except Exception as e:
             return self.send_json({'error': str(e)}, 500)
     def do_POST(self):
-        p = urlparse(self.path).path; d = {} if p == '/api/upload' else self.body(); ip = client_ip(self)
+        p = urlparse(self.path).path; d = {} if p in ('/api/upload', '/api/plugin_upload') else self.body(); ip = client_ip(self)
         if p == '/api/login':
             f = FAILS.get(ip, [0, 0])
-            if f[0] >= 5 and time.time() - f[1] < 60: return self.send_json({'error': '失败太多，1 分钟后再试'}, 429)
-            if secrets.compare_digest(str(d.get('password', '')).encode(), CONF['password'].encode()):
-                sid = secrets.token_urlsafe(32); SESSIONS[sid] = time.time() + int(CONF['session_days']) * 86400; FAILS.pop(ip, None); _save_sessions()
+            if f[0] >= 6 and time.time() - f[1] < 60: return self.send_json({'error': '失败太多，1 分钟后再试'}, 429)
+            u = str(d.get('username', '')).strip(); pw = str(d.get('password', ''))
+            with DB_LOCK, closing(db()) as c:
+                row = c.execute('SELECT * FROM accounts WHERE username=?', (u,)).fetchone()
+            if row and verify_pw(pw, row['pass']):
+                sid = sess_new(row['id']); FAILS.pop(ip, None)
+                with DB_LOCK, closing(db()) as c: c.execute('UPDATE accounts SET last_login=? WHERE id=?', (int(time.time()), row['id']))
+                audit(u, 'login', ip)
                 self.send_response(200); secure = '; Secure' if self.headers.get('X-Forwarded-Proto', '') == 'https' else ''
                 self.send_header('Set-Cookie', f'l4d2panel={sid}; Path=/; HttpOnly{secure}; SameSite=Lax; Max-Age={int(CONF["session_days"]) * 86400}'); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', '11'); self.end_headers(); self.wfile.write(b'{"ok":true}'); return
-            FAILS[ip] = [f[0] + 1, time.time()]; time.sleep(1); return self.send_json({'error': '密码错误'}, 403)
+            FAILS[ip] = [f[0] + 1, time.time()]; time.sleep(1); return self.send_json({'error': '用户名或密码错误'}, 403)
         if not check_session(self): return self.send_json({'error': 'auth'}, 401)
         try:
             if p == '/api/logout':
-                m = re.search(r'(?:^|;\s*)l4d2panel=([A-Za-z0-9_-]+)', self.headers.get('Cookie', '')); SESSIONS.pop(m.group(1), None) if m else None; _save_sessions(); return self.send_json({'ok': True})
+                sess_del(self); return self.send_json({'ok': True})
             if p == '/api/rcon':
                 cmd = str(d.get('cmd', '')).strip()
                 if not cmd: return self.send_json({'error': 'empty'}, 400)
@@ -344,9 +609,28 @@ class H(BaseHTTPRequestHandler):
                 if a not in ('start', 'stop', 'restart', 'monitor'): return self.send_json({'error': 'bad action'}, 400)
                 return self.send_json({'ok': lgsm(a), 'running': ACTION['running']})
             if p == '/api/preset':
-                n = d.get('name');  assert n in ('auto', 'te8', 'te12', 'te16'); return self.send_json({'out': Rcon.run('sm_preset ' + n)})
+                n = d.get('name'); assert n in ('auto', 'te8', 'te12', 'te16')
+                out = Rcon.run('sm_preset ' + n); GS['t'] = 0
+                return self.send_json({'out': out})
             if p == '/api/difficulty':
-                n = d.get('level'); assert n in ('easy', 'normal', 'hard', 'impossible'); return self.send_json({'out': Rcon.run('z_difficulty ' + n)})
+                n = d.get('level'); assert n in ('easy', 'normal', 'hard', 'impossible'); cap = n.capitalize()
+                try: Rcon.run('l4d2_force_difficulty ' + cap)   # plugin locks z_difficulty to this; survives map/campaign resets
+                except Exception: pass
+                out = Rcon.run('z_difficulty ' + cap); GS['t'] = 0
+                return self.send_json({'out': out})
+            if p == '/api/damage':
+                pairs = []
+                for key in ('ff', 'burn'):
+                    if d.get(key) is None: continue
+                    v = max(0.0, min(1.0, float(d[key])))
+                    pairs += [(cv, f'{v:g}') for cv in DAMAGE_CVARS[key]]
+                if not pairs: return self.send_json({'error': 'nothing to set'}, 400)
+                out = '\n'.join(Rcon.run(f'sm_cvar {n} {v}') for n, v in pairs)
+                persisted = True
+                try: persist_cvars(pairs)
+                except Exception as e: persisted = False; out += f'\n(server.cfg not updated: {e})'
+                GS['t'] = 0
+                return self.send_json({'out': out, 'persisted': persisted})
             if p == '/api/map':
                 m = str(d.get('map', '')); assert re.match(r'^[a-z0-9_]+$', m); return self.send_json({'out': Rcon.run('changelevel ' + m)})
             if p == '/api/points':
@@ -356,8 +640,10 @@ class H(BaseHTTPRequestHandler):
             if p == '/api/kick':
                 uid = int(d.get('userid')); return self.send_json({'out': Rcon.run(f'kickid {uid} {q(str(d.get("reason", "由管理面板踢出")))}')})
             if p == '/api/whitelist':
-                op = d.get('op'); sid = str(d.get('steamid', '')).strip()
-                assert re.match(r'^STEAM_[01]:[01]:\d+$', sid), '无效 SteamID'
+                op = d.get('op')
+                try: sid = parse_steamid(d.get('steamid', ''))
+                except ValueError as e: return self.send_json({'error': str(e)}, 400)
+                assert sid, '无效 SteamID'
                 if op == 'add': out = Rcon.run(f'sm_wl_addid {sid} {q(str(d.get("note", "")))}')
                 elif op == 'del': out = Rcon.run(f'sm_wl_del {sid}')
                 else: return self.send_json({'error': 'bad op'}, 400)
@@ -390,9 +676,80 @@ class H(BaseHTTPRequestHandler):
                     if JOBS.get(pubid, {}).get('state') == 'running': return self.send_json({'error': '已经在下载了'}, 400)
                     threading.Thread(target=workshop_job, args=(pubid,), daemon=True).start()
                     return self.send_json({'ok': True, 'id': pubid})
+                if op == 'zip':
+                    names = d.get('names') or ([d.get('name')] if d.get('name') else [])
+                    names = [n for n in names if n]
+                    if not names: return self.send_json({'error': '请选择要打包的战役'}, 400)
+                    token = secrets.token_urlsafe(12)
+                    threading.Thread(target=zip_job, args=(token, names), daemon=True).start()
+                    return self.send_json({'ok': True, 'token': token})
                 return self.send_json({'error': 'bad op'}, 400)
             if p == '/api/whitelist_enable':
-                v = 1 if d.get('enable') else 0; return self.send_json({'out': Rcon.run(f'sm_cvar sm_whitelist_enable {v}')})
+                v = 1 if d.get('enable') else 0; out = Rcon.run(f'sm_cvar sm_whitelist_enable {v}'); GS['t'] = 0
+                return self.send_json({'out': out})
+            if p == '/api/plugins':
+                acc = sess_get(self); out = plugin_action(d.get('op'), str(d.get('file', '')))
+                audit(acc['username'] if acc else '?', 'plugin.' + str(d.get('op')), str(d.get('file', '')))
+                return self.send_json({'out': out, **list_plugins()})
+            if p == '/api/plugin_upload':
+                qs = urlparse(self.path).query; nm = plugin_name(unquote(qs.split('name=', 1)[1])) if 'name=' in qs else None
+                if not nm: return self.send_json({'error': '只接受 .smx 文件'}, 400)
+                n = int(self.headers.get('Content-Length', 0) or 0)
+                if n <= 0 or n > 20 * 1048576: return self.send_json({'error': '文件为空或过大（>20MB）'}, 400)
+                data = b''
+                while len(data) < n:
+                    chunk = self.rfile.read(min(1048576, n - len(data)))
+                    if not chunk: break
+                    data += chunk
+                if len(data) != n or data[:4] != b'FFPS': return self.send_json({'error': '不是有效的 .smx 插件文件'}, 400)
+                dst = os.path.join(SM_PLUGINS, nm + '.smx')
+                with open(dst + '.tmp', 'wb') as f: f.write(data)
+                os.replace(dst + '.tmp', dst)
+                acc = sess_get(self); audit(acc['username'] if acc else '?', 'plugin.upload', nm)
+                try: out = Rcon.run('sm plugins load ' + nm)
+                except Exception as e: out = f'已上传，加载失败（换图或重启后生效）: {e}'
+                return self.send_json({'ok': True, 'out': out, **list_plugins()})
+            if p == '/api/accounts':
+                ac = sess_get(self)
+                if not ac or ac['role'] != 'owner': return self.send_json({'error': '需要 owner 权限'}, 403)
+                op = d.get('op'); uname = str(d.get('username', '')).strip()
+                if op == 'create':
+                    if not re.match(r'^[\w.\-]{2,32}$', uname): return self.send_json({'error': '用户名 2-32 位（字母数字 . _ -）'}, 400)
+                    pw = str(d.get('password', ''))
+                    if len(pw) < 4: return self.send_json({'error': '密码至少 4 位'}, 400)
+                    try: sid_ = parse_steamid(d.get('steamid', ''))
+                    except ValueError as e: return self.send_json({'error': str(e)}, 400)
+                    try:
+                        with DB_LOCK, closing(db()) as c:
+                            c.execute('INSERT INTO accounts(username,pass,role,steamid,flags,note,created) VALUES(?,?,?,?,?,?,?)',
+                                      (uname, hash_pw(pw), 'owner' if d.get('role') == 'owner' else 'admin', sid_ or None, str(d.get('flags', '99:z')).strip() or '99:z', str(d.get('note', '')).strip(), int(time.time())))
+                    except sqlite3.IntegrityError: return self.send_json({'error': '用户名已存在'}, 400)
+                    audit(ac['username'], 'account.create', uname); msg = sync_sm_admins() if sid_ else ''
+                    return self.send_json({'ok': True, 'out': msg})
+                aid = int(d.get('id', 0))
+                if op == 'delete':
+                    if aid == ac['id']: return self.send_json({'error': '不能删除自己'}, 400)
+                    with DB_LOCK, closing(db()) as c:
+                        tgt = c.execute('SELECT role FROM accounts WHERE id=?', (aid,)).fetchone()
+                        if tgt and tgt['role'] == 'owner' and c.execute("SELECT COUNT(*) FROM accounts WHERE role='owner'").fetchone()[0] <= 1:
+                            return self.send_json({'error': '至少保留一个 owner'}, 400)
+                        c.execute('DELETE FROM accounts WHERE id=?', (aid,)); c.execute('DELETE FROM sessions WHERE account_id=?', (aid,))
+                    audit(ac['username'], 'account.delete', str(aid)); return self.send_json({'ok': True, 'out': sync_sm_admins()})
+                if op == 'update':
+                    sets, vals = [], []
+                    if d.get('password'): sets.append('pass=?'); vals.append(hash_pw(str(d['password'])))
+                    if 'role' in d: sets.append('role=?'); vals.append('owner' if d['role'] == 'owner' else 'admin')
+                    if 'steamid' in d:
+                        try: sid_ = parse_steamid(d.get('steamid', ''))
+                        except ValueError as e: return self.send_json({'error': str(e)}, 400)
+                        sets.append('steamid=?'); vals.append(sid_ or None)
+                    if 'flags' in d: sets.append('flags=?'); vals.append(str(d['flags']).strip() or '99:z')
+                    if 'note' in d: sets.append('note=?'); vals.append(str(d['note']).strip())
+                    if not sets: return self.send_json({'error': '没有要修改的字段'}, 400)
+                    vals.append(aid)
+                    with DB_LOCK, closing(db()) as c: c.execute('UPDATE accounts SET ' + ','.join(sets) + ' WHERE id=?', vals)
+                    audit(ac['username'], 'account.update', str(aid)); return self.send_json({'ok': True, 'out': sync_sm_admins()})
+                return self.send_json({'error': 'bad op'}, 400)
             return self.send_json({'error': 'not found'}, 404)
         except AssertionError as e:
             return self.send_json({'error': str(e) or 'bad request'}, 400)
@@ -427,7 +784,7 @@ pre{background:#0d1219;border:1px solid var(--bd);padding:10px;border-radius:8px
 .sw{position:relative;width:46px;height:26px;background:#3a4250;border-radius:999px;cursor:pointer;transition:.2s;flex:none}.sw::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}.sw.on{background:var(--ok)}.sw.on::after{left:23px}.sw.dis{opacity:.4;cursor:default}
 canvas{width:100%;height:56px;display:block}.wl{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #1b2530;font-size:13px}.wl:last-child{border:0}.wl code{color:var(--mu)}
 </style></head><body>
-<div id="login" class="card"><div style="font-size:40px">🧟</div><h2 style="margin:6px 0">L4D2 Ops Panel</h2><div class="mu">Left 4 Dead 2 服务器运维面板</div><input id="pw" type="password" placeholder="密码" onkeydown="if(event.key==='Enter')login()"><button onclick="login()">登录</button><div id="lmsg" class="mu" style="margin-top:8px;color:var(--bad)"></div></div>
+<div id="login" class="card"><div style="font-size:40px">🧟</div><h2 style="margin:6px 0">L4D2 Ops Panel</h2><div class="mu">Left 4 Dead 2 服务器运维面板</div><input id="user" placeholder="用户名" autocomplete="username" onkeydown="if(event.key==='Enter')login()"><input id="pw" type="password" placeholder="密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"><button onclick="login()">登录</button><div id="lmsg" class="mu" style="margin-top:8px;color:var(--bad)"></div></div>
 <div id="app" style="display:none">
 <aside id="side"><div class="brand" id="brand">🧟 L4D2 面板</div>
 <nav>
@@ -435,12 +792,14 @@ canvas{width:100%;height:56px;display:block}.wl{display:flex;justify-content:spa
 <button data-v="players" onclick="nav('players')">👥 玩家 / 白名单</button>
 <button data-v="game" onclick="nav('game')">🎮 游戏设置</button>
 <button data-v="maps" onclick="nav('maps')">🗺️ 地图 / 战役</button>
+<button data-v="plugins" onclick="nav('plugins')">🧩 插件</button>
 <button data-v="console" onclick="nav('console')">⌨️ 控制台</button>
 <button data-v="logs" onclick="nav('logs')">📜 日志 / 性能</button>
 <button data-v="server" onclick="nav('server')">🖥️ 服务器</button>
+<button data-v="accounts" onclick="nav('accounts')" id="nav-accounts" style="display:none">🔐 账号</button>
 </nav><div class="mu" id="sidehost" style="padding:12px 14px;font-size:11px"></div></aside>
 <div id="main">
-<header><h1 id="vtitle">概览</h1><span id="pill" class="pill"><i></i><span>连接中</span></span><span class="sp"></span><span id="ts" class="mu"></span><button class="g sm" onclick="logout()">退出</button></header>
+<header><h1 id="vtitle">概览</h1><span id="pill" class="pill"><i></i><span>连接中</span></span><span class="sp"></span><span id="who" class="mu" style="margin-right:4px"></span><span id="ts" class="mu"></span><button class="g sm" onclick="logout()">退出</button></header>
 
 <section class="view" id="v-overview">
 <div class="tiles">
@@ -460,12 +819,13 @@ canvas{width:100%;height:56px;display:block}.wl{display:flex;justify-content:spa
 <div class="card" data-f="whitelist"><h2>白名单<span class="sp"></span><span id="wlcount" class="mu"></span></h2>
 <div class="row" style="margin-bottom:10px"><span id="sw-wl" class="sw dis" onclick="wlToggle()"></span><span id="wl-state" class="mu">读取中…</span></div>
 <div class="mu" style="margin-bottom:8px">开启 = 只有名单里的人和管理员能进；关闭 = 任何人都能进（临时给朋友开门时用，加完人记得开回来）。</div>
-<div class="row"><input id="wlid" placeholder="STEAM_1:x:y" style="flex:1;min-width:150px"><input id="wlnote" placeholder="备注" style="width:110px"><button onclick="wl('add')">添加</button></div><div id="wllist"></div></div>
+<div class="row"><input id="wlid" placeholder="SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:180px"><input id="wlnote" placeholder="备注" style="width:110px"><button onclick="wl('add')">添加</button></div><div id="wllist"></div></div>
 </section>
 
 <section class="view" id="v-game">
 <div class="card" data-f="preset"><h2>特感强度</h2><div class="row"><span class="seg" id="seg-preset"><button onclick="preset('auto')">auto</button><button onclick="preset('te8')">te8</button><button onclick="preset('te12')">te12</button><button onclick="preset('te16')">te16</button></span></div><div class="mu">auto = 按存活人数 4→16 只自动缩放；te8/te12/te16 = 固定数量。切换立即生效并保存，换图、重启都保持。</div></div>
-<div class="card"><h2>难度</h2><div class="row"><span class="seg" id="seg-diff"><button data-v="easy" onclick="diff('easy')">简单</button><button data-v="normal" onclick="diff('normal')">普通</button><button data-v="hard" onclick="diff('hard')">高级</button><button data-v="impossible" onclick="diff('impossible')">专家</button></span></div><div class="mu">即时生效，已刷出的 Tank 血量不变。</div></div>
+<div class="card"><h2>难度</h2><div class="row"><span class="seg" id="seg-diff"><button data-v="easy" onclick="diff('easy')">简单</button><button data-v="normal" onclick="diff('normal')">普通</button><button data-v="hard" onclick="diff('hard')">高级</button><button data-v="impossible" onclick="diff('impossible')">专家</button></span></div><div class="mu">即时生效，并跨换图保持（默认专家，由 Force Difficulty 插件维持）；已刷出的 Tank 血量不变。</div></div>
+<div class="card"><h2>伤害</h2><div class="row"><label>友伤 <input id="dmg-ff" type="number" min="0" max="1" step="0.05" style="width:80px"></label><label>火焰伤害 <input id="dmg-burn" type="number" min="0" max="1" step="0.05" style="width:80px"></label><button onclick="damage()">应用</button></div><div class="mu">0 = 无伤害，1 = 全额。即时生效并写入 server.cfg（重启保持）。四个难度档位统一设为同一值，所以投票换难度后也不变；游戏默认友伤 0.1/0.3/0.5、火焰 0.2/0.2/0.4/1。</div></div>
 <div class="card" data-f="points"><h2>发放积分</h2><div class="row"><select id="ptarget" style="flex:1;min-width:0" onchange="document.getElementById('pcustom').style.display=this.value==='__custom'?'':'none'"><option value="@all">全体在线玩家</option></select><input id="pcustom" placeholder="玩家名 / #userid" style="width:130px;display:none"><input id="pamount" type="number" value="300" style="width:90px"><button onclick="points()">发放</button></div><div class="mu">通过 Points System 的 sm_givepoints 发放。</div></div>
 </section>
 
@@ -492,12 +852,31 @@ canvas{width:100%;height:56px;display:block}.wl{display:flex;justify-content:spa
 <div class="card"><h2>系统</h2><div id="sysinfo" class="mu">-</div></div>
 <div class="card" id="conninfo" style="display:none"><h2>连接信息</h2><div class="mu">游戏：<code id="connhost"></code></div></div>
 </section>
+
+<section class="view" id="v-plugins">
+<div class="card"><h2>插件管理<span class="sp"></span><button class="g sm" onclick="loadPlugins()">刷新</button></h2>
+<div class="row"><span class="lbl">上传</span><input type="file" id="smxfile" accept=".smx" style="flex:1;min-width:0;padding:6px"><button onclick="uploadSmx()">上传并加载</button></div><div id="smxmsg" class="mu"></div>
+<div id="plugins" style="margin-top:6px"></div>
+<div class="mu" style="margin-top:8px">启用/禁用 = 移动 disabled/ 目录 + 热加载，立即生效；受保护的核心插件不可禁用/删除。删除只能删已禁用的。</div></div>
+<div class="card"><h2>SourceMod 运行中的插件（原始列表）</h2><pre id="plugins-raw" style="max-height:44vh">-</pre></div>
+</section>
+
+<section class="view" id="v-accounts">
+<div class="card"><h2>面板账号<span class="sp"></span><button class="g sm" onclick="loadAccounts()">刷新</button></h2>
+<div class="mu" style="margin-bottom:8px">owner 可管理账号。绑定 SteamID 后，该账号会自动写入游戏管理员（admins_simple.ini 的面板托管块）并热重载，一处管两边。</div>
+<table id="accounts"></table></div>
+<div class="card"><h2>新建账号</h2>
+<div class="row"><input id="na-user" placeholder="用户名" style="width:130px"><input id="na-pw" type="password" placeholder="密码" style="width:130px"><select id="na-role" style="width:90px"><option value="admin">admin</option><option value="owner">owner</option></select></div>
+<div class="row"><input id="na-steam" placeholder="绑定 Steam（可空）：SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:200px"><input id="na-flags" value="99:z" style="width:80px"><button onclick="createAccount()">创建</button></div>
+<div class="mu">绑定 Steam 支持：<code>STEAM_1:1:xxx</code>、<code>[U:1:xxx]</code>、17 位好友码、<code>steamcommunity.com/profiles/…</code> 或 <code>/id/自定义名</code>（自定义名需服务器能连 steamcommunity）。权限位：<code>z</code>=全部管理员权限，前面的数字是免疫等级；留空默认 <code>99:z</code>。</div></div>
+</section>
 </div></div>
 <div id="toast"></div>
 <script>
 const MAPS=%MAPS%;let curlog='console',hist=[];
-const TITLES={overview:'概览',players:'玩家 / 白名单',game:'游戏设置',maps:'地图 / 战役',console:'控制台',logs:'日志 / 性能',server:'服务器'};
-function nav(v){document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));document.querySelectorAll('#side nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));set('vtitle',TITLES[v]||v);try{localStorage.setItem('l4d2view',v)}catch(e){}if(v==='logs')logs(curlog);if(v==='overview')perf();if(v==='maps')loadAddons()}
+const TITLES={overview:'概览',players:'玩家 / 白名单',game:'游戏设置',maps:'地图 / 战役',plugins:'插件',console:'控制台',logs:'日志 / 性能',server:'服务器',accounts:'账号'};
+let myRole='admin';
+function nav(v){if(v==='accounts'&&myRole!=='owner')v='overview';document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));document.querySelectorAll('#side nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));set('vtitle',TITLES[v]||v);try{localStorage.setItem('l4d2view',v)}catch(e){}if(v==='logs')logs(curlog);if(v==='overview')perf();if(v==='maps')loadAddons();if(v==='plugins')loadPlugins();if(v==='accounts')loadAccounts()}
 
 function toast(t,bad){const e=document.getElementById('toast');e.textContent=t;e.style.borderColor=bad?'var(--bad)':'var(--bd)';e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),2800)}
 async function api(p,o){const r=await fetch(p,o?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}:{});if(r.status===401){show(false);throw new Error('未登录')}const j=await r.json();if(j.error)throw new Error(j.error);return j}
@@ -505,16 +884,17 @@ function short(t){t=String(t||'').replace(/\s+/g,' ').trim();return t.length>140
 async function run(p,o,okmsg){try{const j=await api(p,o);toast(okmsg||short(j.out)||'完成');return j}catch(e){toast(e.message,true);throw e}}
 function show(on){document.getElementById('login').style.display=on?'none':'';document.getElementById('app').style.display=on?'':'none'}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-async function login(){try{await api('/api/login',{password:document.getElementById('pw').value});try{await api('/api/status')}catch(e){document.getElementById('lmsg').textContent='密码正确，但浏览器没有保存登录状态：请清除本站 cookie 后重试';return}show(true);boot()}catch(e){document.getElementById('lmsg').textContent=e.message}}
+async function login(){try{await api('/api/login',{username:document.getElementById('user').value.trim(),password:document.getElementById('pw').value});try{await api('/api/status')}catch(e){document.getElementById('lmsg').textContent='登录成功，但浏览器没有保存登录状态：请清除本站 cookie 后重试';return}show(true);boot()}catch(e){document.getElementById('lmsg').textContent=e.message}}
 async function logout(){await api('/api/logout',{});show(false)}
 function set(id,v){document.getElementById(id).textContent=v}
 async function status(){try{const s=await api('/api/status');const sys=s.sys||{};const pill=document.getElementById('pill');pill.className='pill '+(s.online?'on':'off');pill.lastElementChild.textContent=s.online?'在线':(s.srcds?'进程在，游戏未响应':'离线');
 set('t-players',s.online?`${s.players} / ${s.max}`:'-');set('t-bots',s.online?`bot ${s.bots}`:'');set('t-map',s.online?s.map:'-');set('t-name',s.online?s.name:'');set('t-preset',s.preset||'-');set('t-diff','难度 '+({easy:'简单',normal:'普通',hard:'高级',impossible:'专家'}[s.difficulty]||'-')+' · 白名单'+(s.whitelist===null?'?':s.whitelist?'开':'关'));set('sysinfo',sys.load?`负载 ${sys.load} ｜ 内存 ${sys.mem_used_mb}/${sys.mem_total_mb} MB ｜ 系统已运行 ${sys.uptime_h} h ｜ 游戏进程 ${s.srcds?'运行中':'未运行'}`:'-');
-document.querySelectorAll('#seg-preset button').forEach(b=>b.classList.toggle('on',b.textContent===s.preset));document.querySelectorAll('#seg-diff button').forEach(b=>b.classList.toggle('on',b.dataset.v===s.difficulty));
+document.querySelectorAll('#seg-preset button').forEach(b=>b.classList.toggle('on',b.textContent===s.preset));document.querySelectorAll('#seg-diff button').forEach(b=>b.classList.toggle('on',b.dataset.v===s.difficulty));for(const [id,k] of [['dmg-ff','ff'],['dmg-burn','burn']]){const e=document.getElementById(id);if(e&&document.activeElement!==e&&s[k]!=null)e.value=s[k]}
 set('t-fps',s.perf?s.perf.fps:'-');set('t-out',s.perf?s.perf.out_kb+' KB/s':'-');set('t-load',sys.load?sys.load.split(' ')[0]:'-');set('t-mem',sys.mem_used_mb?`内存 ${sys.mem_used_mb}/${sys.mem_total_mb} MB · 已运行 ${sys.uptime_h} h`:'');
-if(s.whitelist!==undefined){wlOn=s.whitelist;renderSw()}if(s.features){document.querySelectorAll('[data-f]').forEach(e=>e.style.display=s.features[e.dataset.f]?'':'none')}if(s.title){set('brand','🧟 '+s.title);document.title=s.title}if(s.display_host){set('sidehost',s.display_host);set('connhost','connect '+s.display_host);document.getElementById('conninfo').style.display=''}set('ts',new Date().toLocaleTimeString());set('actmsg',(s.action.running?'正在执行 '+s.action.running+'… ':'')+(s.action.last||''))}catch(e){}}
+if(s.whitelist!==undefined){wlOn=s.whitelist;renderSw()}if(s.features){document.querySelectorAll('[data-f]').forEach(e=>e.style.display=s.features[e.dataset.f]?'':'none')}if(s.title){set('brand','🧟 '+s.title);document.title=s.title}if(s.display_host){set('sidehost',s.display_host);set('connhost','connect '+s.display_host);document.getElementById('conninfo').style.display=''}if(s.account){myRole=s.account.role;set('who','👤 '+s.account.user+(s.account.role==='owner'?' · owner':''));document.getElementById('nav-accounts').style.display=(s.account.role==='owner')?'':'none'}set('ts',new Date().toLocaleTimeString());set('actmsg',(s.action.running?'正在执行 '+s.action.running+'… ':'')+(s.action.last||''))}catch(e){}}
 async function act(n){const names={restart:'重启',start:'启动',stop:'停止',monitor:'巡检'};if(n!=='monitor'&&!confirm('确定'+names[n]+'服务器？'))return;await run('/api/action',{name:n},'已开始'+names[n]);setTimeout(status,2000);setTimeout(status,20000)}
 async function preset(n){await run('/api/preset',{name:n},'特感预设已切换为 '+n);status()}
+async function damage(){const o={};for(const [id,k] of [['dmg-ff','ff'],['dmg-burn','burn']]){const v=document.getElementById(id).value;if(v!=='')o[k]=+v}if(!Object.keys(o).length){toast('请填写至少一项',true);return}const j=await run('/api/damage',o,'伤害已更新'+(o.ff!=null?'：友伤 '+o.ff:'')+(o.burn!=null?'，火焰 '+o.burn:''));if(j&&j.persisted===false)toast('已生效，但 server.cfg 未写入（看控制台输出）',true);status()}
 async function diff(l){await run('/api/difficulty',{level:l},'难度已设为 '+({easy:'简单',normal:'普通',hard:'高级',impossible:'专家'}[l])+'，即时生效');status()}
 async function changemap(){const m=document.getElementById('map').value;if(!confirm('切换到 '+m+'？当前进度会丢失'))return;await run('/api/map',{map:m},'切换中…');setTimeout(status,8000)}
 function renderTargets(pl){const sel=document.getElementById('ptarget'),cur=sel.value;sel.innerHTML='<option value="@all">全体在线玩家'+(pl.length?'（'+pl.length+' 人）':'')+'</option>'+pl.map(p=>`<option value="#${p.userid}">${esc(p.name)}</option>`).join('')+'<option value="__custom">手动输入…</option>';if([...sel.options].some(o=>o.value===cur))sel.value=cur}
@@ -536,12 +916,28 @@ const lo=min??Math.min(...vals),hi=max??Math.max(...vals),rng=(hi-lo)||1;x.begin
 async function perf(){try{const d=await api('/api/logs?perfjson');spark('c-fps',d.rows.map(r=>r.fps),'#3ddc97',0,32);spark('c-out',d.rows.map(r=>r.out_kb),'#4f8cff',0,null)}catch(e){}}
 
 function fmtJob(j){return j.state==='running'?'⏳ '+j.msg:j.state==='done'?'✅ '+j.msg:'❌ '+j.msg}
-async function loadAddons(){try{const d=await api('/api/addons');const el=document.getElementById('addons');const jobs=Object.entries(d.jobs||{}).map(([id,j])=>`<div class="mu">工坊 ${id}: ${esc(fmtJob(j))}</div>`).join('');
-el.innerHTML=jobs+(d.addons.length?'<table><tr><th>文件</th><th>地图</th><th>大小</th><th></th></tr>'+d.addons.map(a=>`<tr><td><b>${esc(a.name)}</b>${a.mission?'<div class="mu">'+esc(a.mission)+'</div>':''}</td><td class="mu">${a.maps.length?a.maps.length+' 张：'+esc(a.maps.slice(0,3).join(', '))+(a.maps.length>3?'…':''):'—'}</td><td>${a.size_mb} MB</td><td style="white-space:nowrap;text-align:right">${a.maps.length?`<button class="sm" onclick="gomap('${esc(a.maps[0])}')">切到第一章</button> `:''}${a.protected?'':`<button class="d sm" onclick="delAddon('${esc(a.name)}')">删除</button>`}</td></tr>`).join('')+'</table>':'<div class="mu">还没有自定义战役</div>');
+async function loadAddons(){try{const d=await api('/api/addons');const el=document.getElementById('addons');
+const jobs=Object.entries(d.jobs||{}).map(([id,j])=>`<div class="mu">工坊 ${id}: ${esc(fmtJob(j))}</div>`).join('')+Object.entries(d.zips||{}).map(([t,j])=>`<div class="mu">打包: ${esc(fmtJob(j))}${j.state==='done'?` — <a href="/api/download?token=${t}">下载 ${esc(j.name)}（${j.size_mb} MB）</a>`:''}</div>`).join('');
+el.innerHTML=jobs+(d.addons.length?'<table><tr><th>文件</th><th>地图</th><th>大小</th><th></th></tr>'+d.addons.map(a=>`<tr><td><b>${esc(a.name)}</b>${a.mission?'<div class="mu">'+esc(a.mission)+'</div>':''}</td><td class="mu">${a.maps.length?a.maps.length+' 张：'+esc(a.maps.slice(0,3).join(', '))+(a.maps.length>3?'…':''):'—'}</td><td>${a.size_mb} MB</td><td style="white-space:nowrap;text-align:right">${a.maps.length?`<button class="sm" onclick="gomap('${esc(a.maps[0])}')">切到第一章</button> `:''}<button class="g sm" onclick="zipAddon('${esc(a.name)}')">打包下载</button> ${a.protected?'':`<button class="d sm" onclick="delAddon('${esc(a.name)}')">删除</button>`}</td></tr>`).join('')+'</table>':'<div class="mu">还没有自定义战役</div>');
 const sel=document.getElementById('map');const cur=sel.value;sel.innerHTML=MAPS.map(m=>`<option value="${m[0]}">${m[1]} · ${m[0]}</option>`).join('')+d.addons.filter(a=>a.maps.length).map(a=>`<optgroup label="${esc(a.name)}">`+a.maps.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')+'</optgroup>').join('');if([...sel.options].some(o=>o.value===cur))sel.value=cur;
-if(Object.values(d.jobs||{}).some(j=>j.state==='running'))setTimeout(loadAddons,5000)}catch(e){}}
+if(Object.values(d.jobs||{}).some(j=>j.state==='running')||Object.values(d.zips||{}).some(j=>j.state==='running'))setTimeout(loadAddons,3000)}catch(e){}}
 async function gomap(m){if(!confirm('切换到 '+m+'？当前进度会丢失'))return;await run('/api/map',{map:m},'切换中…');setTimeout(status,8000)}
 async function delAddon(n){if(!confirm('删除 '+n+'？'))return;await run('/api/addons',{op:'delete',name:n},'已删除 '+n);loadAddons()}
+async function zipAddon(name){try{const r=await api('/api/addons',{op:'zip',name});toast('开始打包 '+name+'…');loadAddons();pollZip(r.token)}catch(e){toast(e.message,true)}}
+async function pollZip(token){for(let i=0;i<200;i++){await new Promise(r=>setTimeout(r,1500));let d;try{d=await api('/api/addons')}catch(e){return}const j=(d.zips||{})[token];if(!j||j.state==='running')continue;loadAddons();if(j.state==='done'){toast('打包完成，开始下载');window.location='/api/download?token='+token}else toast('打包失败: '+j.msg,true);return}}
+async function loadPlugins(){try{renderPlugins(await api('/api/plugins'))}catch(e){}}
+function renderPlugins(d){const el=document.getElementById('plugins');
+el.innerHTML='<table><tr><th>启用中（plugins/）</th><th></th></tr>'+(d.enabled.length?d.enabled.map(p=>`<tr><td>${esc(p.file)}${p.protected?' <span class="mu">受保护</span>':''}</td><td style="white-space:nowrap;text-align:right"><button class="g sm" data-a="reload" data-f="${esc(p.file)}">重载</button> ${p.protected?'':`<button class="d sm" data-a="disable" data-f="${esc(p.file)}">禁用</button>`}</td></tr>`).join(''):'<tr><td colspan=2 class="mu">没有启用的插件</td></tr>')+'</table>'+(d.disabled.length?'<div class="mu" style="margin:12px 0 4px">已禁用（disabled/）</div><table>'+d.disabled.map(p=>`<tr><td>${esc(p.file)}</td><td style="white-space:nowrap;text-align:right"><button class="sm" data-a="enable" data-f="${esc(p.file)}">启用</button> <button class="d sm" data-a="delete" data-f="${esc(p.file)}">删除</button></td></tr>`).join('')+'</table>':'');
+document.getElementById('plugins-raw').textContent=d.raw||'(服务器离线或无输出)';
+el.querySelectorAll('button[data-a]').forEach(b=>b.onclick=()=>pluginAct(b.dataset.a,b.dataset.f));}
+async function pluginAct(op,file){const names={reload:'重载',disable:'禁用',enable:'启用',delete:'删除'};if((op==='disable'||op==='delete')&&!confirm(names[op]+'插件 '+file+'？'))return;try{const d=await api('/api/plugins',{op,file});toast(short(d.out)||names[op]+'完成');renderPlugins(d)}catch(e){toast(e.message,true)}}
+async function uploadSmx(){const f=document.getElementById('smxfile').files[0];if(!f){toast('先选择一个 .smx 文件',true);return}const m=document.getElementById('smxmsg');m.textContent='上传中 '+f.name+'…';try{const r=await new Promise((res,rej)=>{const x=new XMLHttpRequest();x.open('POST','/api/plugin_upload?name='+encodeURIComponent(f.name));x.onload=()=>res(JSON.parse(x.responseText));x.onerror=()=>rej(new Error('网络错误'));x.send(f)});if(r.error)throw new Error(r.error);m.textContent='';toast('已上传并加载：'+short(r.out));renderPlugins(r)}catch(e){m.textContent='失败: '+e.message}}
+async function loadAccounts(){try{renderAccounts(await api('/api/accounts'))}catch(e){toast(e.message,true)}}
+function renderAccounts(d){const t=document.getElementById('accounts');t.innerHTML='<tr><th>用户名</th><th>角色</th><th>绑定 SteamID</th><th>权限</th><th>最近登录</th><th></th></tr>'+d.accounts.map(a=>{const last=a.last_login?new Date(a.last_login*1000).toLocaleString():'—';return `<tr><td><b>${esc(a.username)}</b>${a.username===d.me?' <span class="mu">(我)</span>':''}</td><td>${esc(a.role)}</td><td><code class="mu">${esc(a.steamid||'—')}</code></td><td class="mu">${esc(a.flags||'')}</td><td class="mu">${esc(last)}</td><td style="white-space:nowrap;text-align:right"><button class="g sm" data-e="${a.id}">编辑</button> ${a.username===d.me?'':`<button class="d sm" data-x="${a.id}" data-u="${esc(a.username)}">删除</button>`}</td></tr>`}).join('');
+window._accts=d.accounts;t.querySelectorAll('button[data-e]').forEach(b=>b.onclick=()=>editAccount(window._accts.find(a=>a.id==b.dataset.e)));t.querySelectorAll('button[data-x]').forEach(b=>b.onclick=()=>delAccount(b.dataset.x,b.dataset.u));}
+async function createAccount(){const u=document.getElementById('na-user').value.trim(),pw=document.getElementById('na-pw').value,role=document.getElementById('na-role').value,steamid=document.getElementById('na-steam').value.trim(),flags=document.getElementById('na-flags').value.trim();if(!u||!pw){toast('填写用户名和密码',true);return}try{await run('/api/accounts',{op:'create',username:u,password:pw,role,steamid,flags},'已创建账号 '+u);document.getElementById('na-user').value='';document.getElementById('na-pw').value='';document.getElementById('na-steam').value='';loadAccounts()}catch(e){}}
+async function delAccount(id,u){if(!confirm('删除账号 '+u+'？'))return;try{await run('/api/accounts',{op:'delete',id:+id},'已删除 '+u);loadAccounts()}catch(e){}}
+async function editAccount(a){const steamid=prompt('绑定 Steam（留空 = 解绑；绑定后写入游戏管理员）\n支持 SteamID / 主页链接 / 17位好友码：',a.steamid||'');if(steamid===null)return;const pw=prompt('设置新密码（留空 = 不改）：','');if(pw===null)return;const body={op:'update',id:a.id,steamid:steamid.trim()};if(pw)body.password=pw;try{await run('/api/accounts',body,'已保存 '+a.username);loadAccounts()}catch(e){}}
 async function workshop(){const id=document.getElementById('wsid').value.trim();if(!id)return;await run('/api/addons',{op:'workshop',id},'开始下载，完成后自动安装');document.getElementById('wsid').value='';setTimeout(loadAddons,1500)}
 async function upload(){const f=document.getElementById('vpkfile').files[0];if(!f){toast('先选择一个 .vpk 文件',true);return}const m=document.getElementById('upmsg');m.textContent='上传中 '+f.name+' ('+(f.size/1048576).toFixed(1)+' MB)…';
 try{const r=await new Promise((res,rej)=>{const x=new XMLHttpRequest();x.open('POST','/api/upload?name='+encodeURIComponent(f.name));x.upload.onprogress=e=>{if(e.lengthComputable)m.textContent='上传中 '+Math.round(e.loaded/e.total*100)+'% · '+f.name};x.onload=()=>res(JSON.parse(x.responseText));x.onerror=()=>rej(new Error('网络错误'));x.send(f)});if(r.error)throw new Error(r.error);m.textContent='已安装 '+r.addon.name+'（'+r.addon.maps.length+' 张地图）';toast('上传完成');loadAddons()}catch(e){m.textContent='失败: '+e.message;toast(e.message,true)}}

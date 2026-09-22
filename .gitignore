@@ -5,3 +5,6 @@ panel/sessions.json
 __pycache__/
 *.pyc
 *.smx
+panel/panel.db
+panel/panel.db-*
+panel/downloads/
