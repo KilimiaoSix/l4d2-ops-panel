@@ -33,8 +33,7 @@ try:
     CONF.update(json.load(open(CONF_PATH, encoding='utf-8')))
 except FileNotFoundError:
     sys.exit(f'config not found: {CONF_PATH} (copy panel.example.json to panel.json or run install.sh)')
-if not CONF['password']:
-    sys.exit('panel.json: "password" must be set')
+# "password" may be empty: the owner account is then created from the first visit (setup page) instead of being seeded here.
 def _abs(p): return p if (not p or os.path.isabs(p)) else os.path.join(DIR, p)
 GAME = CONF['game_dir']
 CONSOLE_LOG = CONF['console_log']; PERF_CSV = CONF['perf_csv']
@@ -416,11 +415,16 @@ def db_init():
         CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, ts INTEGER, who TEXT, action TEXT, detail TEXT);''')
         if not c.execute('SELECT COUNT(*) FROM accounts').fetchone()[0]:
             u = CONF.get('bootstrap_user', 'admin')
-            c.execute('INSERT INTO accounts(username,pass,role,created) VALUES(?,?,?,?)', (u, hash_pw(CONF['password']), 'owner', int(time.time())))
-            print(f'[panel] seeded owner account "{u}" from panel.json password (change it in the 账号 tab)', flush=True)
+            if CONF['password']:
+                c.execute('INSERT INTO accounts(username,pass,role,created) VALUES(?,?,?,?)', (u, hash_pw(CONF['password']), 'owner', int(time.time())))
+                print(f'[panel] seeded owner account "{u}" from panel.json password (change it in the 账号 tab)', flush=True)
+            else:
+                print(f'[panel] no accounts yet: the first visit to the panel sets the password of "{u}"', flush=True)
         c.execute('DELETE FROM sessions WHERE expires<?', (int(time.time()),))
     try: os.chmod(DB_PATH, 0o600)
     except Exception: pass
+def setup_needed():
+    with DB_LOCK, closing(db()) as c: return c.execute('SELECT COUNT(*) FROM accounts').fetchone()[0] == 0
 def audit(who, action, detail=''):
     try:
         with DB_LOCK, closing(db()) as c: c.execute('INSERT INTO audit(ts,who,action,detail) VALUES(?,?,?,?)', (int(time.time()), who, action, str(detail)[:400]))
@@ -634,6 +638,10 @@ class H(BaseHTTPRequestHandler):
     def send_json(self, obj, code=200):
         b = json.dumps(obj, ensure_ascii=False).encode()
         self.send_response(code); self.send_header('Content-Type', 'application/json; charset=utf-8'); self.send_header('Cache-Control', 'no-store'); self.send_header('Content-Length', len(b)); self.end_headers(); self.wfile.write(b)
+    def send_login(self, sid):
+        secure = '; Secure' if self.headers.get('X-Forwarded-Proto', '') == 'https' else ''
+        self.send_response(200); self.send_header('Set-Cookie', f'l4d2panel={sid}; Path=/; HttpOnly{secure}; SameSite=Lax; Max-Age={int(CONF["session_days"]) * 86400}')
+        self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', '11'); self.end_headers(); self.wfile.write(b'{"ok":true}')
     def body(self):
         n = int(self.headers.get('Content-Length', 0) or 0)
         try: return json.loads(self.rfile.read(n) or b'{}')
@@ -642,6 +650,7 @@ class H(BaseHTTPRequestHandler):
         p = urlparse(self.path).path
         if p == '/':
             b = PAGE.encode(); self.send_response(200); self.send_header('Content-Type', 'text/html; charset=utf-8'); self.send_header('Cache-Control', 'no-store'); self.send_header('Content-Length', len(b)); self.end_headers(); self.wfile.write(b); return
+        if p == '/api/setup': return self.send_json({'needed': setup_needed(), 'username': CONF.get('bootstrap_user', 'admin')})
         if not check_session(self): return self.send_json({'error': 'auth'}, 401)
         try:
             if p == '/api/status':
@@ -707,6 +716,15 @@ class H(BaseHTTPRequestHandler):
             return self.send_json({'error': str(e)}, 500)
     def do_POST(self):
         p = urlparse(self.path).path; d = {} if p in ('/api/upload', '/api/plugin_upload') else self.body(); ip = client_ip(self)
+        if p == '/api/setup':   # first run: create the owner account; only possible while there is no account at all
+            pw = str(d.get('password', ''))
+            if len(pw) < 4: return self.send_json({'error': '密码至少 4 位'}, 400)
+            u = CONF.get('bootstrap_user', 'admin'); now = int(time.time())
+            with DB_LOCK, closing(db()) as c:
+                if c.execute('SELECT COUNT(*) FROM accounts').fetchone()[0]: return self.send_json({'error': '面板已经初始化过了，请直接登录'}, 409)
+                aid = c.execute('INSERT INTO accounts(username,pass,role,created,last_login) VALUES(?,?,?,?,?)', (u, hash_pw(pw), 'owner', now, now)).lastrowid
+            audit(u, 'setup', ip); print(f'[panel] owner account "{u}" created from {ip}', flush=True)
+            return self.send_login(sess_new(aid))
         if p == '/api/login':
             f = FAILS.get(ip, [0, 0])
             if f[0] >= 6 and time.time() - f[1] < 60: return self.send_json({'error': '失败太多，1 分钟后再试'}, 429)
@@ -717,9 +735,9 @@ class H(BaseHTTPRequestHandler):
                 sid = sess_new(row['id']); FAILS.pop(ip, None)
                 with DB_LOCK, closing(db()) as c: c.execute('UPDATE accounts SET last_login=? WHERE id=?', (int(time.time()), row['id']))
                 audit(u, 'login', ip)
-                self.send_response(200); secure = '; Secure' if self.headers.get('X-Forwarded-Proto', '') == 'https' else ''
-                self.send_header('Set-Cookie', f'l4d2panel={sid}; Path=/; HttpOnly{secure}; SameSite=Lax; Max-Age={int(CONF["session_days"]) * 86400}'); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', '11'); self.end_headers(); self.wfile.write(b'{"ok":true}'); return
-            FAILS[ip] = [f[0] + 1, time.time()]; time.sleep(1); return self.send_json({'error': '用户名或密码错误'}, 403)
+                return self.send_login(sid)
+            FAILS[ip] = [f[0] + 1, time.time()]; time.sleep(1)
+            return self.send_json({'error': '面板还没有初始化，请先设置管理员密码' if not row and setup_needed() else '用户名或密码错误'}, 403)
         if not check_session(self): return self.send_json({'error': 'auth'}, 401)
         try:
             if p == '/api/logout':
@@ -926,11 +944,12 @@ table{width:100%;border-collapse:collapse;font-size:13px}th{color:var(--mu);font
 pre{background:#0d1219;border:1px solid var(--bd);padding:10px;border-radius:8px;max-height:340px;overflow:auto;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;margin:0}
 .mu{color:var(--mu);font-size:12px}.tabs{display:flex;gap:6px}.tabs button{background:var(--sur2);border:1px solid var(--bd);color:var(--mu);padding:5px 10px;font-size:12px}.tabs button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1d2733;border:1px solid var(--bd);padding:10px 16px;border-radius:10px;font-size:13px;box-shadow:0 8px 30px #0008;opacity:0;pointer-events:none;transition:.2s;max-width:90vw}#toast.show{opacity:1}
-#login{max-width:360px;margin:12vh auto;text-align:center}body{padding:0}code{background:var(--sur2);padding:1px 5px;border-radius:4px;font-size:12px}#login input{width:100%;margin:12px 0;font-size:15px;padding:11px}#login button{width:100%;padding:11px;font-size:15px}
+#login,#setup{max-width:360px;margin:12vh auto;text-align:center}body{padding:0}code{background:var(--sur2);padding:1px 5px;border-radius:4px;font-size:12px}#login input,#setup input{width:100%;margin:12px 0;font-size:15px;padding:11px}#login button,#setup button{width:100%;padding:11px;font-size:15px}
 .sw{position:relative;width:46px;height:26px;background:#3a4250;border-radius:999px;cursor:pointer;transition:.2s;flex:none}.sw::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}.sw.on{background:var(--ok)}.sw.on::after{left:23px}.sw.dis{opacity:.4;cursor:default}
 .bar{height:6px;background:#1b2530;border-radius:3px;overflow:hidden;margin:4px 0 6px}.bar i{display:block;height:100%;background:var(--ok);transition:width .5s}
 canvas{width:100%;height:56px;display:block}.wl{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #1b2530;font-size:13px}.wl:last-child{border:0}.wl code{color:var(--mu)}
 </style></head><body>
+<div id="setup" class="card" style="display:none"><div style="font-size:40px">🧟</div><h2 style="margin:6px 0">首次使用：设置管理员密码</h2><div class="mu">账号 <code id="su-user">admin</code> 是 owner，之后可以在“账号”页改密码、加其他账号。</div><input id="su-pw" type="password" placeholder="设置密码（至少 4 位）" autocomplete="new-password" onkeydown="if(event.key==='Enter')setup()"><input id="su-pw2" type="password" placeholder="再输一次" autocomplete="new-password" onkeydown="if(event.key==='Enter')setup()"><button onclick="setup()">设置并进入面板</button><div id="sumsg" class="mu" style="margin-top:8px;color:var(--bad)"></div></div>
 <div id="login" class="card"><div style="font-size:40px">🧟</div><h2 style="margin:6px 0">L4D2 Ops Panel</h2><div class="mu">Left 4 Dead 2 服务器运维面板</div><input id="user" placeholder="用户名" autocomplete="username" onkeydown="if(event.key==='Enter')login()"><input id="pw" type="password" placeholder="密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"><button onclick="login()">登录</button><div id="lmsg" class="mu" style="margin-top:8px;color:var(--bad)"></div></div>
 <div id="app" style="display:none">
 <aside id="side"><div class="brand" id="brand">🧟 L4D2 面板</div>
@@ -1033,7 +1052,9 @@ function toast(t,bad){const e=document.getElementById('toast');e.textContent=t;e
 async function api(p,o){const r=await fetch(p,o?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}:{});if(r.status===401){show(false);throw new Error('未登录')}const j=await r.json();if(j.error)throw new Error(j.error);return j}
 function short(t){t=String(t||'').replace(/\s+/g,' ').trim();return t.length>140?t.slice(0,140)+'…':t}
 async function run(p,o,okmsg){try{const j=await api(p,o);toast(okmsg||short(j.out)||'完成');return j}catch(e){toast(e.message,true);throw e}}
-function show(on){document.getElementById('login').style.display=on?'none':'';document.getElementById('app').style.display=on?'':'none'}
+function show(on){document.getElementById('login').style.display=on?'none':'';document.getElementById('app').style.display=on?'':'none';if(on)document.getElementById('setup').style.display='none'}
+function showSetup(u){document.getElementById('login').style.display='none';document.getElementById('app').style.display='none';document.getElementById('setup').style.display='';document.getElementById('su-user').textContent=u||'admin'}
+async function setup(){const pw=document.getElementById('su-pw').value,pw2=document.getElementById('su-pw2').value,m=document.getElementById('sumsg');if(pw.length<4){m.textContent='密码至少 4 位';return}if(pw!==pw2){m.textContent='两次输入不一致';return}try{await api('/api/setup',{password:pw});show(true);boot()}catch(e){m.textContent=e.message}}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function login(){try{await api('/api/login',{username:document.getElementById('user').value.trim(),password:document.getElementById('pw').value});try{await api('/api/status')}catch(e){document.getElementById('lmsg').textContent='登录成功，但浏览器没有保存登录状态：请清除本站 cookie 后重试';return}show(true);boot()}catch(e){document.getElementById('lmsg').textContent=e.message}}
 async function logout(){await api('/api/logout',{});show(false)}
@@ -1097,7 +1118,7 @@ async function wsCancel(id){try{await run('/api/addons',{op:'workshop_cancel',id
 async function upload(){const f=document.getElementById('vpkfile').files[0];if(!f){toast('先选择一个 .vpk 文件',true);return}const m=document.getElementById('upmsg');m.textContent='上传中 '+f.name+' ('+(f.size/1048576).toFixed(1)+' MB)…';
 try{const r=await new Promise((res,rej)=>{const x=new XMLHttpRequest();x.open('POST','/api/upload?name='+encodeURIComponent(f.name));x.upload.onprogress=e=>{if(e.lengthComputable)m.textContent='上传中 '+Math.round(e.loaded/e.total*100)+'% · '+f.name};x.onload=()=>res(JSON.parse(x.responseText));x.onerror=()=>rej(new Error('网络错误'));x.send(f)});if(r.error)throw new Error(r.error);m.textContent='已安装 '+r.addon.name+'（'+r.addon.maps.length+' 张地图）';toast('上传完成');loadAddons()}catch(e){m.textContent='失败: '+e.message;toast(e.message,true)}}
 function boot(){document.getElementById('map').innerHTML=MAPS.map(m=>`<option value="${m[0]}">${m[1]} · ${m[0]}</option>`).join('');let v='overview';try{v=localStorage.getItem('l4d2view')||v}catch(e){}nav(v);status();loadPlayers();loadWl();loadAddons();logs('console');perf();setInterval(status,10000);setInterval(loadPlayers,30000);setInterval(perf,60000)}
-(async()=>{try{await api('/api/status');show(true);boot()}catch(e){show(false)}})();
+(async()=>{try{await api('/api/status');show(true);boot()}catch(e){try{const s=await (await fetch('/api/setup')).json();if(s.needed){showSetup(s.username);return}}catch(e2){}show(false)}})();
 </script></div></body></html>""".replace('%MAPS%', json.dumps(MAPS, ensure_ascii=False))
 
 if __name__ == '__main__':

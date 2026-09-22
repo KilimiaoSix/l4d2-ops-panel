@@ -34,7 +34,7 @@ cd l4d2-ops-panel/panel
 ./install.sh          # 以运行游戏的用户执行；交互式填路径，自动生成密码、证书和 systemd 服务
 ```
 
-装完在云防火墙放行面板端口（默认 TCP 8443），浏览器打开 `https://<服务器IP或域名>:8443/`。登录账号、密码是安装时设置的（账号默认 `admin`，密码留空会自动生成并打印）：首次启动会用它们建出 owner 账号，之后改密码、加账号都在“账号”页，`panel.json` 里的 `password` 只在建库时用一次。自签名证书首次会有一次警告；换成正式证书只需替换 `cert.pem` / `key.pem` 后 `systemctl restart l4d2panel`。
+装完在云防火墙放行面板端口（默认 TCP 8443），浏览器打开 `https://<服务器IP或域名>:8443/`。第一次打开面板会要求给 owner 账号（默认 `admin`，即 `bootstrap_user`）设置密码，设完直接进入面板，之后就是正常登录；安装时也可以预先填一个密码，那样首次启动直接用它建账号。改密码、加账号都在“账号”页。忘记密码：停掉面板，删掉 `panel.db`（账号、会话和审计记录一起清空），再启动后重新走一次初始化。自签名证书首次会有一次警告；换成正式证书只需替换 `cert.pem` / `key.pem` 后 `systemctl restart l4d2panel`。
 
 想放在 nginx 后面：安装时选“方式 2”，参考 `panel/nginx.example.conf`。反代必须把 `X-Real-IP` 传给面板（示例里已有），登录失败限速按这个头识别来源 IP。
 
@@ -42,7 +42,7 @@ cd l4d2-ops-panel/panel
 
 | 键 | 说明 |
 |---|---|
-| `password` | 首次启动建库时给 `bootstrap_user` 账号用的初始密码（安装脚本自动生成），之后改密码在“账号”页 |
+| `password` | 可留空。留空则第一次打开面板时在网页上设置 owner 密码；填了则首次启动直接用它建出 owner 账号。只在建库时用一次，之后改密码在“账号”页 |
 | `db` / `bootstrap_user` | SQLite 文件（账号 / 会话 / 审计，默认 `panel.db`，相对路径相对于 panel.py 所在目录）、首次启动建出的 owner 账号名（默认 `admin`） |
 | `port` / `bind` / `tls` / `cert` / `key` | 监听端口、地址、是否自带 HTTPS、证书路径 |
 | `rcon_host` / `rcon_port` / `rcon_password` | RCON 地址。`rcon_password` 留空则自动读 `game_dir/cfg/server.cfg`。**注意 L4D2 不回应发到 127.0.0.1 的查询，填服务器网卡 IP** |
@@ -69,6 +69,7 @@ cd l4d2-ops-panel/panel
 ## 安全说明
 
 - 账号分 owner / admin：“账号”页人人可见，能改自己的密码和 Steam 绑定（改密码会登出其他设备）；owner 还能建 / 删账号、改别人的密码和绑定。其余功能两者一样，登录即拥有服务器全部操作权限，别给不该给的人；密码以 PBKDF2-SHA256 存在 `panel.db`，同 IP 连续 6 次失败锁 1 分钟，会话 7 天；登录、账号和插件操作记入 `panel.db` 的 audit 表
+- 初始化页面在第一个账号建立之前对所有能打开面板的人开放，装好后尽快打开面板把密码设掉
 - 请用 HTTPS（自带自签名或 nginx + 正式证书）；HTTP 明文在公共网络会泄露密码
 - 面板只在你自己的服务器上运行，不上报任何东西；对外的网络请求只有两类：创意工坊下载（DepotDownloader 连 Steam）和把 `steamcommunity.com/id/自定义名` 解析成 SteamID（只在你填了这种链接时发生）
 

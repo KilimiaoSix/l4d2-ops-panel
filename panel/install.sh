@@ -14,10 +14,10 @@ PERF=$(ask "性能采样 CSV（tools/perf-sampler.sh 产出；没有则留空）
 DD=$(ask "DepotDownloader 路径（用于创意工坊下载；没有则留空）" "$HOME/tools/depotdownloader/DepotDownloader")
 HOST=$(ask "对外显示的域名或 IP（可空）" "")
 ADMIN_USER=$(ask "面板管理员账号" "admin")
-ADMIN_PASS=$(ask "面板管理员密码（留空 = 自动生成）" "")
+ADMIN_PASS=$(ask "面板管理员密码（留空 = 第一次打开面板时在网页上设置）" "")
 MODE=$(ask "监听方式：1 = 自带 HTTPS（自签名证书） 2 = 仅本机 8080，前面放 nginx" "1")
 if [ "$MODE" = "1" ]; then PORT=$(ask "端口" "8443"); BIND=0.0.0.0; TLS=true; else PORT=8080; BIND=127.0.0.1; TLS=false; fi
-PASS=${ADMIN_PASS:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(12))')}
+PASS="$ADMIN_PASS"
 python3 - "$GAME_DIR" "$LGSM" "$RCON_HOST" "$RCON_PORT" "$CONSOLE_LOG" "$PERF" "$DD" "$HOST" "$PORT" "$BIND" "$TLS" "$PASS" "$ADMIN_USER" <<'PY'
 import json,sys
 a=sys.argv[1:]
@@ -54,5 +54,5 @@ fi
 echo
 echo "==================================================="
 if [ "$TLS" = true ]; then echo "地址：https://${HOST:-<服务器IP>}:$PORT/   （记得在云防火墙放行 TCP $PORT）"; else echo "面板监听 127.0.0.1:8080，请配置 nginx 反代（见 nginx.example.conf）"; fi
-echo "账号：$ADMIN_USER   密码：$PASS   （首次启动用它建出 owner 账号；之后改密码在“账号”页，panel.json 里的 password 只在建库时用一次）"
+if [ -n "$PASS" ]; then echo "账号：$ADMIN_USER   密码：$PASS   （首次启动用它建出 owner 账号；之后改密码在“账号”页，panel.json 里的 password 只在建库时用一次）"; else echo "账号：$ADMIN_USER   密码：第一次打开面板时在网页上设置，之后正常登录"; fi
 echo "==================================================="

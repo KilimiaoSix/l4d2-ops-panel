@@ -1,5 +1,5 @@
 {
-  "password": "CHANGE-ME",
+  "password": "",
   "port": 8443,
   "bind": "0.0.0.0",
   "tls": true,
