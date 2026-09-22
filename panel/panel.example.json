@@ -19,6 +19,7 @@
   "perf_csv": "/home/l4d2server/log/perf-samples.csv",
   "depotdownloader": "/home/l4d2server/tools/depotdownloader/DepotDownloader",
   "steam_api_base": "https://api.steampowered.com",
+  "steam_community_base": "https://steamcommunity.com",
   "workshop_connections": 8,
   "workshop_retries": 8,
   "steam_api_key": "",

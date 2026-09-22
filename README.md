@@ -1,8 +1,10 @@
 # L4D2 Ops Panel
 
-Left 4 Dead 2 专用服务器的轻量 Web 运维面板。**单文件 Python 3，零依赖**，通过 RCON / A2S 控制游戏，可选接入 LinuxGSM 做开关服，手机浏览器也能用。
+Left 4 Dead 2 专用服务器的 Web 运维面板。**FastAPI 后端 + Vue 3 前端**，通过 RCON / A2S 控制游戏，可选接入 LinuxGSM 做开关服，手机浏览器也能用。
 
-> A single-file, dependency-free web panel for Left 4 Dead 2 dedicated servers (RCON/A2S based, optional LinuxGSM integration, Chinese UI).
+> A web panel for Left 4 Dead 2 dedicated servers: FastAPI backend, Vue 3 frontend, RCON/A2S based, optional LinuxGSM integration, Chinese UI.
+
+这份 README 面向装面板、用面板的人。想改代码、跑测试、了解结构，看 [docs/development.md](docs/development.md)；开服本身的踩坑在 [docs/l4d2-server-notes.md](docs/l4d2-server-notes.md)。
 
 ## 功能
 
@@ -18,25 +20,43 @@ Left 4 Dead 2 专用服务器的轻量 Web 运维面板。**单文件 Python 3�
 | 服务器 | 启动 / 停止 / 重启 / 巡检（LinuxGSM）、系统信息 |
 | 账号 | 每个人都能改自己的密码、绑定 / 解绑 Steam；owner 还能管理全部账号（建 / 删、改密码、改绑定）。绑定 SteamID 的账号自动写入 `admins_simple.ini` 的面板托管块并热重载游戏管理员 |
 
-没装的组件对应功能会**自动隐藏**（面板启动时通过 `sm plugins list` 探测）。
+没装的组件对应功能会**自动隐藏**（面板通过 `sm plugins list` 探测，每 2 分钟一次）。接口文档在 `/api/docs`（OpenAPI）。
 
 ## 要求
 
-- Linux + Python 3.8+（服务器自带即可，不装任何库）
+- 服务器：Linux + **Python 3.10+**（Ubuntu 22.04 / 24.04 自带 3.10 / 3.12）。Ubuntu 默认没有 venv 模块，先 `sudo apt install python3-venv`；依赖只有 `fastapi` 和 `uvicorn`，装在 `panel/venv/` 里，不碰系统 Python
 - 游戏开启 RCON（`server.cfg` 里有 `rcon_password`）
 - 可选：LinuxGSM（开关服）、本仓库的 SourceMod 插件（预设 / 白名单）、Points System（发分）；DepotDownloader 只在工坊物品没有直链时作回退，绝大多数 L4D2 地图不需要
+- 开发机（改前端时才需要）：Node.js 20+，用来把 `frontend/` 构建成静态文件；服务器上不需要 Node
 
 ## 安装
 
+前端是构建产物，仓库里不带，所以先在开发机构建，再把 `panel/` 整个目录放到服务器：
+
 ```bash
 git clone https://github.com/KilimiaoSix/l4d2-ops-panel.git
-cd l4d2-ops-panel/panel
-./install.sh          # 以运行游戏的用户执行；交互式填路径，自动生成密码、证书和 systemd 服务
+cd l4d2-ops-panel/frontend && npm ci && npm run build     # 产物写入 ../panel/l4d2panel/static/
+rsync -a --exclude venv --exclude tests --exclude devenv --exclude panel.json --exclude 'panel.db*' ../panel/ l4d2server@<服务器>:/home/l4d2server/panel/
 ```
+
+服务器上（以运行游戏的用户执行）：
+
+```bash
+cd /home/l4d2server/panel
+./install.sh          # 建 venv 装依赖；交互式填路径，自动生成密码、证书和 systemd 服务
+```
+
+国内主机 pip 慢，先 `export PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple` 再跑 `install.sh`。
 
 装完在云防火墙放行面板端口（默认 TCP 8443），浏览器打开 `https://<服务器IP或域名>:8443/`。第一次打开面板会要求给 owner 账号（默认 `admin`，即 `bootstrap_user`）设置密码，设完直接进入面板，之后就是正常登录；安装时也可以预先填一个密码，那样首次启动直接用它建账号。改密码、加账号都在“账号”页。忘记密码：停掉面板，删掉 `panel.db`（账号、会话和审计记录一起清空），再启动后重新走一次初始化。自签名证书首次会有一次警告；换成正式证书只需替换 `cert.pem` / `key.pem` 后 `systemctl restart l4d2panel`。
 
 想放在 nginx 后面：安装时选“方式 2”，参考 `panel/nginx.example.conf`。反代必须把 `X-Real-IP` 传给面板（示例里已有），登录失败限速按这个头识别来源 IP。
+
+### 更新与回滚
+
+更新：开发机 `npm run build` → 同 rsync 一次 → 服务器 `venv/bin/pip install -r requirements.txt`（依赖版本变了才需要）→ `sudo systemctl restart l4d2panel`。`panel.json`、`panel.db`、证书都在 `panel/` 目录里，rsync 时排除即可保留。
+
+回滚：`panel.py` 只是入口，把整个 `panel/` 目录换回上一版再 restart 即可；`panel.db` 的表结构与早期单文件版一致，来回切换都能直接用。带备份、冒烟检查的完整发布步骤见 [docs/development.md](docs/development.md#发布到服务器)。
 
 ## 配置 `panel/panel.json`
 
@@ -51,7 +71,7 @@ cd l4d2-ops-panel/panel
 | `console_log` / `perf_csv` | 控制台日志、性能采样文件，不存在则隐藏对应功能 |
 | `depotdownloader` | [DepotDownloader](https://github.com/SteamRE/DepotDownloader) 路径，仅作工坊下载的回退（物品没有直链时），可留空 |
 | `workshop_connections` / `workshop_retries` | 工坊下载的并发连接数（默认 8）和每个 8 MB 分块的最大重试次数（默认 8）。下载中断或取消后已完成的分块保留在 `workshop_tmp/`，再点一次会续传 |
-| `steam_api_base` | 查询工坊物品用的 Steam Web API 地址，默认 `https://api.steampowered.com`，需要走镜像 / 代理时改这里 |
+| `steam_api_base` / `steam_community_base` | 查询工坊物品的 Steam Web API 地址（默认 `https://api.steampowered.com`）、解析 `/id/自定义名` 用的社区地址（默认 `https://steamcommunity.com`），需要走镜像 / 代理时改这里 |
 | `steam_api_key` | Steam Web API Key（免费，登录 Steam 后在 https://steamcommunity.com/dev/apikey 申请，域名随便填）。填了才会显示“在创意工坊找战役”卡片；只在服务器上用来调 `IPublishedFileService/QueryFiles`，不会出现在页面里。留空则只能按 ID / 链接下载 |
 | `panel_title` / `display_host` | 标题、对外显示的连接地址 |
 | `max_upload_mb` / `protected_addons` | 上传上限、不允许删除的 vpk |
@@ -69,12 +89,13 @@ cd l4d2-ops-panel/panel
 
 ## 安全说明
 
-- 账号分 owner / admin：“账号”页人人可见，能改自己的密码和 Steam 绑定（改密码会登出其他设备）；owner 还能建 / 删账号、改别人的密码和绑定。其余功能两者一样，登录即拥有服务器全部操作权限，别给不该给的人；密码以 PBKDF2-SHA256 存在 `panel.db`，同 IP 连续 6 次失败锁 1 分钟，会话 7 天；登录、账号和插件操作记入 `panel.db` 的 audit 表
+- 账号分 owner / admin：“账号”页人人可见，能改自己的密码和 Steam 绑定（改密码会登出其他设备）；owner 还能建 / 删账号、改别人的密码和绑定。其余功能两者一样，登录即拥有服务器全部操作权限，别给不该给的人；密码以 PBKDF2-SHA256 存在 `panel.db`，同 IP 连续 6 次失败锁 1 分钟，会话 7 天；登录、账号、插件、RCON、踢人、切图、设置、白名单、战役、开关服等所有写操作都记入 `panel.db` 的 audit 表
 - 初始化页面在第一个账号建立之前对所有能打开面板的人开放，装好后尽快打开面板把密码设掉
-- 请用 HTTPS（自带自签名或 nginx + 正式证书）；HTTP 明文在公共网络会泄露密码
+- 请用 HTTPS（自带自签名或 nginx + 正式证书）；HTTP 明文在公共网络会泄露密码。面板自带 TLS 或反代带 `X-Forwarded-Proto: https` 时会话 cookie 带 `Secure`
+- 页面上所有来自游戏的数据（玩家名、地图名、插件输出、工坊搜索结果）只经模板插值渲染，不拼 HTML，不用 `v-html`
 - 面板只在你自己的服务器上运行，不上报任何东西；对外的网络请求只有两类：创意工坊（搜索和查询走 Steam Web API、从 Steam CDN 拉文件，或回退 DepotDownloader）和把 `steamcommunity.com/id/自定义名` 解析成 SteamID（只在你填了这种链接时发生）。搜索结果里的缩略图由**浏览器**直接从 Steam 的图片 CDN 加载，加载不到就不显示
 - 面板不会去 gamemaps.com 抓文件：那个站用 Cloudflare 拦掉了所有非浏览器客户端。在自己的浏览器里下载它的 zip，再从“地图 / 战役”页上传即可
-- 页面会让**浏览器**从 Google Fonts 异步加载两款字体（Barlow Condensed / IBM Plex Mono）作为渐进增强，加载不到就回退到系统字体、不阻塞显示；不想要的话删掉 `panel.py` 里 `PAGE` 中那行 `fonts.googleapis.com` 的 `<link>` 即可
+- 页面会让**浏览器**从 Google Fonts 异步加载两款字体（Barlow Condensed / IBM Plex Mono）作为渐进增强，加载不到就回退到系统字体、不阻塞显示；不想要的话删掉 `frontend/index.html` 里 `fonts.googleapis.com` 的 `<link>` 再构建即可
 
 ## 许可
 
