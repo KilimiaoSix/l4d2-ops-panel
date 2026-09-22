@@ -7,12 +7,23 @@ API returns, so tests can override fields (file_type=2 for a collection, consume
 """
 import json, re, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
+
+# page 1 of a campaign search: a real-looking item, a tiny one, and a result!=1 row the panel must drop
+SEARCH_RESULTS = [
+    {'result': 1, 'publishedfileid': '2396847377', 'title': '广州增城 （Zengcheng）Lv8.06', 'file_size': '867196936', 'preview_url': 'https://images.example/zc.jpg',
+     'subscriptions': 1553836, 'time_updated': 1782860476, 'tags': [{'tag': 'Campaigns'}, {'tag': 'Single Player'}, {'tag': 'Co-op'}], 'vote_data': {'score': 0.91}, 'short_description': 'A campaign'},
+    {'result': 1, 'publishedfileid': '100100100', 'title': 'Test Campaign', 'file_size': '4096', 'subscriptions': 12, 'tags': [{'tag': 'Campaigns'}]},
+    {'result': 9, 'publishedfileid': '9999'},
+]
 
 
 class FakeSteam:
     def __init__(self):
         self.items, self.files, self.vanity = {}, {}, {}
+        self.api_key = 'testkey'         # QueryFiles answers 403 for any other key
+        self.queries = []                # QueryFiles requests the panel made: list of {param: [values]}
+        self.search_results = SEARCH_RESULTS
         self.fail_ranges = {}          # pubid -> number of range requests still to cut short
         self.hold = threading.Event()  # while set, range requests block (lets a test cancel a download mid-flight)
         self.hold.clear()
@@ -34,6 +45,13 @@ class FakeSteam:
                 self.send_error(404)
             def do_GET(self):
                 rng = self.headers.get('Range'); fake.requests.append(('GET', self.path, rng))
+                u = urlparse(self.path)
+                if u.path == '/IPublishedFileService/QueryFiles/v1/':
+                    qs = parse_qs(u.query); fake.queries.append(qs)
+                    if qs.get('key') != [fake.api_key]:
+                        b = b'<html><body>Access is denied</body></html>'; self.send_response(403); self.send_header('Content-Length', str(len(b))); self.end_headers(); self.wfile.write(b); return
+                    if qs.get('page') == ['2']: return self._json({'response': {'total': 57, 'publishedfiledetails': []}})
+                    return self._json({'response': {'total': 57, 'publishedfiledetails': fake.search_results}})
                 m = re.fullmatch(r'/files/([^/?]+)', self.path)
                 if m and m.group(1) in fake.files:
                     pid = m.group(1); data = fake.files[pid]

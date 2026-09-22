@@ -5,7 +5,7 @@ import pytest
 
 from tests.fakes.game import A2S_INFO
 
-ALL_FEATURES = {'lgsm': True, 'workshop': True, 'console_log': True, 'perf': True, 'sourcemod': True, 'whitelist': True, 'preset': True, 'points': True}
+ALL_FEATURES = {'lgsm': True, 'workshop': True, 'workshop_search': False, 'console_log': True, 'perf': True, 'sourcemod': True, 'whitelist': True, 'preset': True, 'points': True}
 
 
 def test_status_online(api, fake_game):

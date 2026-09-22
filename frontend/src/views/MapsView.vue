@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { cancelWorkshop, changeMap, deleteAddon, getAddons, startWorkshop, startZip, uploadVpk } from '../api/endpoints'
-import type { AddonsResponse } from '../api/types'
+import { cancelWorkshop, changeMap, deleteAddon, getAddons, startWorkshop, startZip, uploadCampaign, workshopSearch } from '../api/endpoints'
+import type { AddonsResponse, WorkshopItem } from '../api/types'
 import JobRow from '../components/JobRow.vue'
 import { run, toast } from '../composables/useToast'
 import { CAMPAIGNS } from '../data/campaigns'
@@ -52,13 +52,31 @@ async function zip(name: string) {
 }
 async function uploadFile() {
   const f = fileEl.value?.files?.[0]
-  if (!f) { toast('先选择一个 .vpk 文件', true); return }
+  if (!f) { toast('先选择一个 .vpk 或 .zip 文件', true); return }
   upMsg.value = `上传中 ${f.name} (${(f.size / 1048576).toFixed(1)} MB)…`
   try {
-    const r = await uploadVpk(f, p => { upMsg.value = `上传中 ${p}% · ${f.name}` })
-    upMsg.value = `已安装 ${r.addon.name}（${r.addon.maps.length} 张地图）`; toast('上传完成'); void load()
+    const r = await uploadCampaign(f, p => { upMsg.value = p < 100 ? `上传中 ${p}% · ${f.name}` : `已上传，正在检查并安装 ${f.name}…` })
+    upMsg.value = '已安装 ' + r.installed.map(a => `${a.name}（${a.maps.length} 张地图）`).join('、') + (r.skipped.length ? '；跳过：' + r.skipped.map(s => s.reason).join('；') : '')
+    toast('上传完成' + (r.skipped.length ? `，有 ${r.skipped.length} 个文件被拒收` : ''), !!r.skipped.length); void load()
   } catch (e) { upMsg.value = '失败: ' + (e as Error).message; toast((e as Error).message, true) }
 }
+
+// ---- Workshop search: campaigns only, paged; "安装" hands the id to the download job above ----
+const wsQuery = ref(''), wsItems = ref<WorkshopItem[]>([]), wsTotal = ref(0), wsPage = ref(1), wsMsg = ref(''), wsStarted = ref(new Set<string>())
+let wsTerm = ''
+async function search(more = false) {
+  if (more) wsPage.value++
+  else { wsTerm = wsQuery.value.trim(); wsPage.value = 1; wsItems.value = []; wsMsg.value = '搜索中…' }
+  try {
+    const d = await workshopSearch(wsTerm, wsPage.value)
+    wsItems.value = wsItems.value.concat(d.items); wsTotal.value = d.total; wsMsg.value = wsItems.value.length ? '' : '没有找到相关战役'
+  } catch (e) { if (!more) wsMsg.value = (e as Error).message; toast((e as Error).message, true) }
+}
+async function installFromSearch(id: string) {
+  wsStarted.value.add(id)
+  try { await run(() => startWorkshop(id), '开始下载，完成后自动安装'); setTimeout(load, 1500) } catch { wsStarted.value.delete(id) }
+}
+const day = (t: number) => t ? new Date(t * 1000).toLocaleDateString() : '—'
 </script>
 
 <template>
@@ -75,7 +93,7 @@ async function uploadFile() {
     </div>
     <div class="card"><h2>自定义战役<span class="sp" /><button class="g sm" @click="load">刷新</button></h2>
       <div v-if="session.features?.workshop" class="row"><span class="lbl">工坊</span><input v-model="wsId" placeholder="创意工坊 ID 或链接" style="flex:1;min-width:0" @keydown.enter="workshop"><button @click="workshop">下载安装</button></div>
-      <div class="row"><span class="lbl">上传</span><input ref="fileEl" type="file" accept=".vpk" style="flex:1;min-width:0"><button @click="uploadFile">上传</button></div>
+      <div class="row"><span class="lbl">上传</span><input ref="fileEl" type="file" accept=".vpk,.zip" style="flex:1;min-width:0"><button @click="uploadFile">上传</button></div>
       <div class="mu">{{ upMsg }}</div>
       <div style="margin-top:8px">
         <JobRow v-for="(j, id) in data.jobs" :key="'ws' + id" :label="'工坊 ' + id" :job="j"><button v-if="j.state === 'running'" class="g sm" @click="cancel(String(id))">取消</button></JobRow>
@@ -95,7 +113,24 @@ async function uploadFile() {
         </table></div>
         <div v-else class="mu">还没有自定义战役</div>
       </div>
-      <div class="hint">装完自动热加载，不用重启。玩家客户端也要订阅同一个创意工坊物品，否则进不了自定义战役。</div>
+      <div class="hint">装完自动热加载，不用重启。玩家客户端也要订阅同一个创意工坊物品，否则进不了自定义战役。上传 zip（例如 gamemaps.com 下载的压缩包）会自动解压出里面的 vpk；不含地图（maps/*.bsp）的 vpk 一律拒收。</div>
+    </div>
+    <div v-if="session.features?.workshop_search" class="card"><h2>在创意工坊找战役</h2>
+      <div class="row"><input v-model="wsQuery" placeholder="战役名或关键字，留空 = 订阅最多的战役" style="flex:1;min-width:0" @keydown.enter="search()"><button @click="search()">搜索</button></div>
+      <div style="margin-top:8px">
+        <div v-if="wsMsg" class="mu">{{ wsMsg }}</div>
+        <div v-if="wsItems.length" class="tw"><table>
+          <tr><th /><th>战役</th><th>大小</th><th>订阅</th><th>更新</th><th /></tr>
+          <tr v-for="i in wsItems" :key="i.id">
+            <td><img v-if="i.preview" class="thumb" :src="i.preview" alt="" loading="lazy" @error="($event.target as HTMLImageElement).style.display = 'none'"></td>
+            <td><b>{{ i.title }}</b><div class="mu">{{ i.tags.join(' · ') }}{{ i.desc ? (i.tags.length ? ' — ' : '') + i.desc : '' }}</div><code class="mu">{{ i.id }}</code></td>
+            <td class="mu">{{ i.size_mb }} MB</td><td class="mu">{{ i.subs.toLocaleString() }}</td><td class="mu">{{ day(i.updated) }}</td>
+            <td class="act"><button class="sm" :disabled="wsStarted.has(i.id)" @click="installFromSearch(i.id)">{{ wsStarted.has(i.id) ? '已开始下载' : '安装' }}</button></td>
+          </tr>
+        </table></div>
+        <div v-if="wsItems.length && wsItems.length < wsTotal" class="row"><button class="g sm" @click="search(true)">加载更多</button><span class="mu">已显示 {{ wsItems.length }} / {{ wsTotal }}</span></div>
+      </div>
+      <div class="hint">只列出带 Campaigns 标签的物品；点“安装”走上面的工坊下载通道，装前同样检查 vpk 里有没有地图。</div>
     </div>
   </section>
 </template>

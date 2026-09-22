@@ -18,6 +18,7 @@ class FeatureDetector:
         s = self.settings
         f = {'lgsm': self.lgsm.available(),
              'workshop': True,   # Web API + ranged HTTP download; DepotDownloader is only a fallback
+             'workshop_search': bool(s.steam_api_key),
              'console_log': bool(s.console_log) and os.path.exists(s.console_log), 'perf': bool(s.perf_csv) and os.path.exists(s.perf_csv),
              'sourcemod': False, 'whitelist': False, 'preset': False, 'points': False}
         if online:

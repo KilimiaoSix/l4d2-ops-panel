@@ -1,5 +1,5 @@
 import { api, upload } from './client'
-import type { Account, AddonsResponse, Me, Out, PerfRow, Player, PluginsResponse, Status } from './types'
+import type { Account, AddonsResponse, Me, Out, PerfRow, Player, PluginsResponse, Status, UploadResult, WorkshopSearch } from './types'
 
 export const getSetup = () => api<{ needed: boolean; username: string }>('/api/setup')
 export const postSetup = (password: string) => api<{ ok: true }>('/api/setup', { password })
@@ -26,8 +26,9 @@ export const deleteAddon = (name: string) => api<{ ok: true; out: string; addons
 export const startWorkshop = (id: string) => api<{ ok: true; id: string }>('/api/addons', { op: 'workshop', id })
 export const cancelWorkshop = (id: string) => api<{ ok: true }>('/api/addons', { op: 'workshop_cancel', id })
 export const startZip = (name: string) => api<{ ok: true; token: string }>('/api/addons', { op: 'zip', name })
-export const uploadVpk = (file: File, onProgress?: (p: number) => void) =>
-  upload<{ ok: true; addon: AddonsResponse['addons'][number]; out: string }>('/api/upload?name=' + encodeURIComponent(file.name), file, onProgress)
+export const uploadCampaign = (file: File, onProgress?: (p: number) => void) =>
+  upload<UploadResult>('/api/upload?name=' + encodeURIComponent(file.name), file, onProgress)
+export const workshopSearch = (q: string, page: number) => api<WorkshopSearch>('/api/workshop_search?q=' + encodeURIComponent(q) + '&page=' + page)
 
 export const getPlugins = () => api<PluginsResponse>('/api/plugins')
 export const pluginAction = (op: string, file: string) => api<Out & PluginsResponse>('/api/plugins', { op, file })

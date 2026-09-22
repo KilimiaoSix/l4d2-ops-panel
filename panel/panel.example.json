@@ -22,6 +22,7 @@
   "steam_community_base": "https://steamcommunity.com",
   "workshop_connections": 8,
   "workshop_retries": 8,
+  "steam_api_key": "",
 
   "panel_title": "L4D2 运维面板",
   "display_host": "l4d2.example.com",

@@ -21,7 +21,7 @@ def test_upload_vpk_installs_and_hot_reloads(api, fake_game, game_dir):
     r = api.post('/api/upload?name=' + quote('新战役 v2.vpk'), content=data)
     assert r.status_code == 200, r.text
     j = r.json()
-    assert j['ok'] is True and j['addon'] == {'name': '新战役 v2.vpk', 'size_mb': 0.0, 'maps': ['up1_a'], 'mission': 'upmission', 'protected': False} and 'out' in j
+    assert j['ok'] is True and j['installed'] == [{'name': '新战役 v2.vpk', 'size_mb': 0.0, 'maps': ['up1_a'], 'mission': 'upmission', 'protected': False}] and j['skipped'] == [] and 'out' in j
     assert fake_game.commands[-2:] == ['update_addon_paths', 'mission_reload']
     assert (game_dir.addons / '新战役 v2.vpk').read_bytes() == data
     assert not list(game_dir.addons.glob('*.uploading'))
@@ -31,7 +31,7 @@ def test_upload_rejects_bad_files(api, game_dir):
     before = game_dir.addon_names()
     r = api.post('/api/upload?name=bad.vpk', content=b'not a vpk at all')
     assert r.status_code == 400 and 'VPK' in r.json()['error']
-    assert api.post('/api/upload?name=notes.txt', content=build_vpk(['a.txt'])).status_code == 400
+    assert api.post('/api/upload?name=notes.txt', content=build_vpk(['maps/a.bsp'])).status_code == 400
     assert api.post('/api/upload', content=build_vpk(['a.txt'])).status_code == 400
     assert api.post('/api/upload?name=empty.vpk', content=b'').status_code == 400
     assert game_dir.addon_names() == before

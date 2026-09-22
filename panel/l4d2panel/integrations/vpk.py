@@ -1,4 +1,4 @@
-"""VPK directory reader (v1 / v2), best effort: the list of file paths inside a .vpk."""
+"""VPK directory reader (v1 / v2), best effort: the list of file paths inside a .vpk, and what it amounts to."""
 import struct
 
 VPK_MAGIC = b'\x34\x12\xaa\x55'
@@ -31,3 +31,13 @@ def vpk_entries(path):
     except Exception:
         pass
     return out
+
+
+def vpk_summary(path):
+    """What a vpk holds: its campaign maps, its mission file, and a one-line description of the contents for the 'not a map' message."""
+    ents = vpk_entries(path)
+    maps = sorted(e.split('/')[-1][:-4] for e in ents if e.startswith('maps/') and e.endswith('.bsp'))
+    mission = next((e.split('/')[-1][:-4] for e in ents if e.startswith('missions/') and e.endswith('.txt')), '')
+    tops = sorted(set(e.split('/')[0] + '/' if '/' in e else e for e in ents))
+    kind = f'{len(ents)} 个文件：' + '、'.join(tops[:5]) + ('…' if len(tops) > 5 else '') if ents else '解析不到任何文件'
+    return {'maps': maps, 'mission': mission, 'kind': kind}

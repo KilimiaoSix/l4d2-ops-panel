@@ -68,7 +68,7 @@ def test_workshop_rejects_unusable_items(api, panel, fake_steam, game_dir):
     fake_steam.add_item('100000402', b'x', consumer_app_id=440)                  # not L4D2
     fake_steam.add_item('100000403', b'x', file_url='', file_size=0)             # no direct file and no DepotDownloader configured
     fake_steam.add_item('100000404', b'not a vpk' * 100)                         # downloads but is not a VPK
-    for pubid, needle in [('100000401', '合集'), ('100000402', 'Left 4 Dead 2'), ('100000403', '没有可直接下载'), ('100000404', '不是 VPK'), ('100000999', '没有这个物品')]:
+    for pubid, needle in [('100000401', '合集'), ('100000402', 'Left 4 Dead 2'), ('100000403', '没有可直接下载'), ('100000404', 'VPK'), ('100000999', '没有这个物品')]:
         assert api.post('/api/addons', json={'op': 'workshop', 'id': pubid}).status_code == 200
         job = panel.wait_for(job_when_finished(api, pubid), timeout=60)
         assert job['state'] == 'error' and needle in job['msg'], (pubid, job)

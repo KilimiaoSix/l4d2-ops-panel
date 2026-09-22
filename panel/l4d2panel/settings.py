@@ -34,6 +34,7 @@ class Settings(BaseModel):
     depotdownloader: str = '/home/l4d2server/tools/depotdownloader/DepotDownloader'
     steam_api_base: str = 'https://api.steampowered.com'
     steam_community_base: str = 'https://steamcommunity.com'
+    steam_api_key: str = ''                # Steam Web API key: enables the workshop search card ('' = hidden)
     workshop_connections: int = 8
     workshop_retries: int = 8
     panel_title: str = 'L4D2 运维面板'

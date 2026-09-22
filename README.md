@@ -11,7 +11,7 @@ Left 4 Dead 2 专用服务器的 Web 运维面板。**FastAPI 后端 + Vue 3 前
 | 概览 | 在线/离线、地图、玩家数、当前预设/难度/白名单状态、Server FPS、出流量、系统负载；FPS 与出流量曲线 |
 | 玩家 / 白名单 | 在线玩家（踢出 / 发分 / 加白名单）；白名单开关（带状态、重启保持）与名单增删，SteamID 可填 `STEAM_1:x:y`、`[U:1:x]`、17 位好友码或个人主页链接 |
 | 游戏设置 | 特感强度预设（auto / te8 / te12 / te16）、难度（即时生效并高亮）、友伤 / 火焰伤害系数（写入 server.cfg，重启保持）、发放积分（下拉选在线玩家或 @all） |
-| 地图 / 战役 | 切图（官方 14 战役 + 已安装自定义战役）；按创意工坊 ID 或链接下载安装（直连 Steam CDN，多连接分块、失败重试、断点续传、可取消，带进度条）、上传 vpk、列出 / 切到第一章 / 打包下载 / 删除，装完热加载不用重启 |
+| 地图 / 战役 | 切图（官方 14 战役 + 已安装自定义战役）；按创意工坊 ID 或链接下载安装（直连 Steam CDN，多连接分块、失败重试、断点续传、可取消，带进度条）；在创意工坊里按名字搜战役、一键安装（需 `steam_api_key`）；上传 vpk 或 zip（zip 自动解压出里面的 vpk，gamemaps.com 下载的压缩包可以直接传）；列出 / 切到第一章 / 打包下载 / 删除，装完热加载不用重启。**所有安装途径都只收战役文件**：vpk 里没有 `maps/*.bsp` 的（皮肤、音效、脚本之类）一律拒收并删除 |
 | 插件 | SourceMod 插件列表，启用 / 禁用 / 重载 / 删除，上传 .smx 即时加载；核心插件受保护，不能禁用或删除 |
 | 控制台 | 任意 RCON 命令，命令历史 |
 | 日志 / 性能 | 控制台日志、SourceMod 报错、性能采样 |
@@ -70,6 +70,7 @@ cd /home/l4d2server/panel
 | `depotdownloader` | [DepotDownloader](https://github.com/SteamRE/DepotDownloader) 路径，仅作工坊下载的回退（物品没有直链时），可留空 |
 | `workshop_connections` / `workshop_retries` | 工坊下载的并发连接数（默认 8）和每个 8 MB 分块的最大重试次数（默认 8）。下载中断或取消后已完成的分块保留在 `workshop_tmp/`，再点一次会续传 |
 | `steam_api_base` / `steam_community_base` | 查询工坊物品的 Steam Web API 地址（默认 `https://api.steampowered.com`）、解析 `/id/自定义名` 用的社区地址（默认 `https://steamcommunity.com`），需要走镜像 / 代理时改这里 |
+| `steam_api_key` | Steam Web API Key（免费，登录 Steam 后在 https://steamcommunity.com/dev/apikey 申请，域名随便填）。填了才会显示“在创意工坊找战役”卡片；只在服务器上用来调 `IPublishedFileService/QueryFiles`，不会出现在页面里。留空则只能按 ID / 链接下载 |
 | `panel_title` / `display_host` | 标题、对外显示的连接地址 |
 | `max_upload_mb` / `protected_addons` | 上传上限、不允许删除的 vpk |
 | `protected_plugins` | 插件页里不允许禁用 / 删除的插件名（不带 `.smx`） |
@@ -125,8 +126,9 @@ python3 panel.py --config devenv/panel.json      # 另开一个终端；账号 a
 - 账号分 owner / admin：“账号”页人人可见，能改自己的密码和 Steam 绑定（改密码会登出其他设备）；owner 还能建 / 删账号、改别人的密码和绑定。其余功能两者一样，登录即拥有服务器全部操作权限，别给不该给的人；密码以 PBKDF2-SHA256 存在 `panel.db`，同 IP 连续 6 次失败锁 1 分钟，会话 7 天；登录、账号、插件、RCON、踢人、切图、设置、白名单、战役、开关服等所有写操作都记入 `panel.db` 的 audit 表
 - 初始化页面在第一个账号建立之前对所有能打开面板的人开放，装好后尽快打开面板把密码设掉
 - 请用 HTTPS（自带自签名或 nginx + 正式证书）；HTTP 明文在公共网络会泄露密码。面板自带 TLS 或反代带 `X-Forwarded-Proto: https` 时会话 cookie 带 `Secure`
-- 页面上所有来自游戏的数据（玩家名、地图名、插件输出）只经模板插值渲染，不拼 HTML，不用 `v-html`
-- 面板只在你自己的服务器上运行，不上报任何东西；对外的网络请求只有两类：创意工坊下载（查询 Steam Web API、从 Steam CDN 拉文件，或回退 DepotDownloader）和把 `steamcommunity.com/id/自定义名` 解析成 SteamID（只在你填了这种链接时发生）
+- 页面上所有来自游戏的数据（玩家名、地图名、插件输出、工坊搜索结果）只经模板插值渲染，不拼 HTML，不用 `v-html`
+- 面板只在你自己的服务器上运行，不上报任何东西；对外的网络请求只有两类：创意工坊（搜索和查询走 Steam Web API、从 Steam CDN 拉文件，或回退 DepotDownloader）和把 `steamcommunity.com/id/自定义名` 解析成 SteamID（只在你填了这种链接时发生）。搜索结果里的缩略图由**浏览器**直接从 Steam 的图片 CDN 加载，加载不到就不显示
+- 面板不会去 gamemaps.com 抓文件：那个站用 Cloudflare 拦掉了所有非浏览器客户端。在自己的浏览器里下载它的 zip，再从“地图 / 战役”页上传即可
 - 页面会让**浏览器**从 Google Fonts 异步加载两款字体（Barlow Condensed / IBM Plex Mono）作为渐进增强，加载不到就回退到系统字体、不阻塞显示；不想要的话删掉 `frontend/index.html` 里 `fonts.googleapis.com` 的 `<link>` 再构建即可
 
 ## 许可

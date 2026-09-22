@@ -2,7 +2,7 @@
 export interface SysInfo { load?: string; mem_used_mb?: number; mem_total_mb?: number; uptime_h?: number }
 
 export interface Features {
-  lgsm: boolean; workshop: boolean; console_log: boolean; perf: boolean
+  lgsm: boolean; workshop: boolean; workshop_search: boolean; console_log: boolean; perf: boolean
   sourcemod: boolean; whitelist: boolean; preset: boolean; points: boolean
 }
 
@@ -30,6 +30,14 @@ export interface Job {
 }
 
 export interface AddonsResponse { addons: Addon[]; jobs: Record<string, Job>; zips: Record<string, Job> }
+
+/** /api/upload: every campaign vpk installed (from a .vpk or the vpks inside a .zip), the rest with the reason it was refused. */
+export interface UploadResult { ok: true; installed: Addon[]; skipped: { name: string; reason: string }[]; out: string }
+
+export interface WorkshopItem {
+  id: string; title: string; size_mb: number; subs: number; updated: number; preview: string; tags: string[]; score: number; desc: string
+}
+export interface WorkshopSearch { items: WorkshopItem[]; total: number; page: number }
 
 export interface PluginsResponse { enabled: { file: string; protected: boolean }[]; disabled: { file: string }[]; raw: string }
 

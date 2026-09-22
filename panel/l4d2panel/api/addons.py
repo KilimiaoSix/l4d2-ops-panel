@@ -51,6 +51,12 @@ async def upload(request: Request, name: str = '', ctx: AppContext = Depends(get
     return ctx.addons.finish_upload(safe, tmp, got, n, account['username'])
 
 
+@router.get('/api/workshop_search')
+def workshop_search(q: str = '', page: int = 1, ctx: AppContext = Depends(get_ctx), account: dict = Depends(current_account)):
+    """Search the Workshop for campaigns (needs steam_api_key); ?q= text, empty = most subscribed; ?page= for more."""
+    return ctx.addons.search(q, page)
+
+
 @router.get('/api/download')
 def download(token: str = '', ctx: AppContext = Depends(get_ctx), account: dict = Depends(current_account)):
     path, name = ctx.addons.download(token)
