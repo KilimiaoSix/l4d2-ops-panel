@@ -1,6 +1,4 @@
 """First-run setup, login, sessions, rate limiting and the auth gate on every API route."""
-import http.client
-
 import pytest
 
 from tests.conftest import OWNER_PW, OWNER_USER
@@ -22,8 +20,8 @@ def test_first_run_setup_creates_the_owner(panel):
     assert c.post('/api/setup', json={'password': '123'}).status_code == 400
     r = c.post('/api/setup', json={'password': 'newpass1'})
     assert r.status_code == 200 and r.json() == {'ok': True}
-    cookie = r.headers['set-cookie']
-    assert cookie.startswith('l4d2panel=') and 'HttpOnly' in cookie and 'SameSite=Lax' in cookie and 'Path=/' in cookie and f'Max-Age={7 * 86400}' in cookie and 'Secure' not in cookie
+    cookie = r.headers['set-cookie']; attrs = cookie.lower()
+    assert cookie.startswith('l4d2panel=') and 'httponly' in attrs and 'samesite=lax' in attrs and 'path=/' in attrs and f'max-age={7 * 86400}' in attrs and 'secure' not in attrs
     assert c.get('/api/setup').json()['needed'] is False
     assert c.post('/api/setup', json={'password': 'again123'}).status_code == 409
     me = c.get('/api/me').json()
@@ -38,7 +36,7 @@ def test_login_logout_and_session_cookie(panel):
     r = c.post('/api/login', json={'username': OWNER_USER, 'password': 'wrong'})
     assert r.status_code == 403 and r.json()['error']
     r = c.post('/api/login', json={'username': OWNER_USER, 'password': OWNER_PW})
-    assert r.status_code == 200 and r.json() == {'ok': True} and 'Secure' not in r.headers['set-cookie']
+    assert r.status_code == 200 and r.json() == {'ok': True} and 'secure' not in r.headers['set-cookie'].lower()
     assert c.get('/api/status').status_code == 200
     assert c.post('/api/logout', json={}).json() == {'ok': True}
     assert c.get('/api/status').status_code == 401
@@ -48,7 +46,7 @@ def test_login_logout_and_session_cookie(panel):
 def test_secure_cookie_behind_https_proxy(panel):
     c = panel.client()
     r = c.post('/api/login', json={'username': OWNER_USER, 'password': OWNER_PW}, headers={'X-Forwarded-Proto': 'https'})
-    assert r.status_code == 200 and 'Secure' in r.headers['set-cookie']
+    assert r.status_code == 200 and 'secure' in r.headers['set-cookie'].lower()
 
 
 def test_login_rate_limit_is_per_client_ip(panel):

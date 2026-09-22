@@ -9,3 +9,8 @@ panel/panel.db
 panel/panel.db-*
 panel/downloads/
 .pytest_cache/
+panel/venv/
+panel/l4d2panel/static/*
+!panel/l4d2panel/static/.gitkeep
+frontend/node_modules/
+frontend/dist/

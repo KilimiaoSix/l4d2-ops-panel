@@ -1,6 +1,5 @@
 """Game settings and quick actions: preset, difficulty, damage factors, map change, points, kick, raw RCON, LinuxGSM."""
 import glob
-import os
 
 import pytest
 
