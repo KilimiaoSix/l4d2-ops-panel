@@ -46,28 +46,28 @@ const when = (t: number | null) => t ? new Date(t * 1000).toLocaleString() : '�
 
 <template>
   <section class="view on">
-    <div class="card"><h2>我的账号<span class="sp" /><span class="mu">{{ me ? me.username + ' · ' + me.role + (me.steamid ? ' · ' + me.steamid : '') : '' }}</span></h2>
-      <div class="row"><input v-model="cur" type="password" placeholder="当前密码" autocomplete="current-password" style="width:140px"><input v-model="nw" type="password" placeholder="新密码" autocomplete="new-password" style="width:140px"><input v-model="nw2" type="password" placeholder="再输一次新密码" autocomplete="new-password" style="width:150px"><button @click="changePw">修改密码</button></div>
-      <div class="row"><input v-model="steam" placeholder="绑定 Steam（留空 = 解绑）：SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:200px"><button @click="bind">保存绑定</button></div>
-      <div class="hint">改密码后其他设备上的登录会失效；绑定 Steam 后会写入游戏管理员（admins_simple.ini 的面板托管块）并热重载。</div>
-    </div>
-    <template v-if="session.role === 'owner'">
-      <div class="card"><h2>面板账号<span class="sp" /><button class="g sm" @click="loadAccounts">刷新</button></h2>
-        <div class="hint" style="margin:0 0 10px">owner 可管理账号。绑定 SteamID 后，该账号会自动写入游戏管理员（admins_simple.ini 的面板托管块）并热重载，一处管两边。</div>
-        <div class="tw"><table>
-          <tr><th>用户名</th><th>角色</th><th>绑定 SteamID</th><th>权限</th><th>最近登录</th><th /></tr>
-          <tr v-for="a in accounts" :key="a.id">
-            <td><b>{{ a.username }}</b><span v-if="a.username === meName" class="mu"> (我)</span></td><td>{{ a.role }}</td>
-            <td><code class="mu">{{ a.steamid || '—' }}</code></td><td class="mu">{{ a.flags || '' }}</td><td class="mu">{{ when(a.last_login) }}</td>
-            <td class="act"><button class="g sm" @click="edit(a)">编辑</button> <button v-if="a.username !== meName" class="d sm" @click="del(a)">删除</button></td>
-          </tr>
-        </table></div>
+    <div class="grid acct">
+      <div class="card"><h2>我的账号<span class="sp" /><span class="mu">{{ me ? me.username + ' · ' + me.role + (me.steamid ? ' · ' + me.steamid : '') : '' }}</span></h2>
+        <div class="row"><input v-model="cur" type="password" placeholder="当前密码" autocomplete="current-password" style="width:140px"><input v-model="nw" type="password" placeholder="新密码" autocomplete="new-password" style="width:140px"><input v-model="nw2" type="password" placeholder="再输一次新密码" autocomplete="new-password" style="width:150px"><button @click="changePw">修改密码</button></div>
+        <div class="row"><input v-model="steam" placeholder="绑定 Steam（留空 = 解绑）：SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:200px"><button @click="bind">保存绑定</button></div>
+        <div class="note">改密码后其他设备上的登录会失效；绑定 Steam 后会写入游戏管理员（admins_simple.ini 的面板托管块）并热重载。</div>
       </div>
-      <div class="card"><h2>新建账号</h2>
+      <div v-if="session.role === 'owner'" class="card"><h2>新建账号</h2>
         <div class="row"><input v-model="na.username" placeholder="用户名" style="width:140px"><input v-model="na.password" type="password" placeholder="密码" style="width:140px"><select v-model="na.role" style="width:96px"><option value="admin">admin</option><option value="owner">owner</option></select></div>
         <div class="row"><input v-model="na.steamid" placeholder="绑定 Steam（可空）：SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:200px"><input v-model="na.flags" style="width:86px"><button @click="create">创建</button></div>
-        <div class="hint">绑定 Steam 支持：<code>STEAM_1:1:xxx</code>、<code>[U:1:xxx]</code>、17 位好友码、<code>steamcommunity.com/profiles/…</code> 或 <code>/id/自定义名</code>（自定义名需服务器能连 steamcommunity）。权限位：<code>z</code>=全部管理员权限，前面的数字是免疫等级；留空默认 <code>99:z</code>。</div>
+        <div class="note"><p><b>绑定 Steam</b> 支持 <code>STEAM_1:1:xxx</code>、<code>[U:1:xxx]</code>、17 位好友码、<code>steamcommunity.com/profiles/…</code> 或 <code>/id/自定义名</code>（自定义名需服务器能连 steamcommunity）。</p><p><b>权限位</b> <code>z</code> = 全部管理员权限，前面的数字是免疫等级；留空默认 <code>99:z</code>。</p></div>
       </div>
-    </template>
+    </div>
+    <div v-if="session.role === 'owner'" class="card"><h2>面板账号<span class="sp" /><button class="g sm" @click="loadAccounts">刷新</button></h2>
+      <div class="hint" style="margin:0 0 10px">owner 可管理账号。绑定 SteamID 后，该账号会自动写入游戏管理员（admins_simple.ini 的面板托管块）并热重载，一处管两边。</div>
+      <div class="tw"><table>
+        <tr><th>用户名</th><th>角色</th><th>绑定 SteamID</th><th>权限</th><th>最近登录</th><th /></tr>
+        <tr v-for="a in accounts" :key="a.id">
+          <td><b>{{ a.username }}</b><span v-if="a.username === meName" class="mu"> (我)</span></td><td>{{ a.role }}</td>
+          <td><code class="mu">{{ a.steamid || '—' }}</code></td><td class="mu">{{ a.flags || '' }}</td><td class="mu">{{ when(a.last_login) }}</td>
+          <td class="act"><button class="g sm" @click="edit(a)">编辑</button> <button v-if="a.username !== meName" class="d sm" @click="del(a)">删除</button></td>
+        </tr>
+      </table></div>
+    </div>
   </section>
 </template>

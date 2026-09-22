@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { logout } from '../api/endpoints'
 import { usePolling } from '../composables/usePolling'
+import { toast } from '../composables/useToast'
 import { VIEWS } from '../router'
 import { session } from '../stores/session'
 import Mark from './Mark.vue'
@@ -12,6 +13,23 @@ const current = computed(() => VIEWS.find(v => v.name === route.name) ?? VIEWS[0
 const st = computed(() => session.status)
 const pillText = computed(() => st.value?.online ? '在线' : (st.value?.srcds ? '进程在，游戏未响应' : '离线'))
 const pillClass = computed(() => st.value ? (st.value.online ? 'on' : 'off') : '')
+// page footer vitals (the 服务器 page shows the detailed version of the same numbers)
+const load1 = computed(() => st.value?.sys.load?.split(' ')[0] || '-')
+const memPct = computed(() => st.value?.sys.mem_total_mb ? Math.round(100 * (st.value.sys.mem_used_mb || 0) / st.value.sys.mem_total_mb) + '%' : '-')
+const proc = computed(() => st.value ? (st.value.srcds ? '运行中' : '未运行') : '-')
+const connect = computed(() => st.value?.display_host ? 'connect ' + st.value.display_host : '')
+
+async function copyConnect() {
+  const t = connect.value
+  try {
+    if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(t)
+    else {   // plain http on a LAN: the clipboard API is unavailable, fall back to the legacy command
+      const ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;opacity:0'
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove()
+    }
+    toast('已复制：' + t)
+  } catch { toast('复制失败，请手动选中文本复制', true) }
+}
 
 usePolling(() => session.refreshStatus(), 10000)
 usePolling(() => session.refreshPlayers(), 30000)
@@ -50,7 +68,6 @@ async function doLogout() {
             </svg>{{ v.title }}
           </button>
         </nav>
-        <div v-if="st?.display_host" class="foot"><span class="k">连接地址</span><code>{{ st.display_host }}</code></div>
       </aside>
       <div id="main">
         <header>
@@ -66,6 +83,13 @@ async function doLogout() {
           </div>
         </header>
         <RouterView :key="String(route.name)" />
+        <footer id="pfoot">
+          <div v-if="connect" id="f-conn" class="fs"><span class="k">连接地址</span><code>{{ connect }}</code><button class="g sm" @click="copyConnect">复制</button></div>
+          <span class="sp" />
+          <div class="fs"><span class="k">负载</span><b>{{ load1 }}</b></div>
+          <div class="fs"><span class="k">内存</span><b>{{ memPct }}</b></div>
+          <div class="fs"><span class="k">游戏进程</span><b>{{ proc }}</b></div>
+        </footer>
       </div>
     </div>
   </div>

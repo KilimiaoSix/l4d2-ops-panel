@@ -24,11 +24,9 @@ async function uploadFile() {
 </script>
 
 <template>
-  <section class="view on">
-    <div class="card"><h2>插件管理<span class="sp" /><button class="g sm" @click="load">刷新</button></h2>
-      <div class="row"><span class="lbl">上传</span><input ref="fileEl" type="file" accept=".smx" style="flex:1;min-width:0"><button @click="uploadFile">上传并加载</button></div>
-      <div class="mu">{{ msg }}</div>
-      <div style="margin-top:8px">
+  <section class="view on"><div class="grid pg">
+    <div class="card"><h2>插件列表<span class="sp" /><button class="g sm" @click="load">刷新</button></h2>
+      <div>
         <div class="tw"><table>
           <tr><th>启用中（plugins/）</th><th /></tr>
           <tr v-for="p in data.enabled" :key="p.file">
@@ -47,8 +45,15 @@ async function uploadFile() {
           </table></div>
         </template>
       </div>
-      <div class="hint">启用/禁用 = 移动 disabled/ 目录 + 热加载，立即生效；受保护的核心插件不可禁用/删除。删除只能删已禁用的。</div>
+      <div class="note">启用 / 禁用 = 移动 disabled/ 目录 + 热加载，立即生效；受保护的核心插件不可禁用、删除。删除只能删已禁用的。</div>
     </div>
-    <div class="card"><h2>SourceMod 运行中的插件（原始列表）</h2><pre style="max-height:44vh">{{ data.raw || '(服务器离线或无输出)' }}</pre></div>
-  </section>
+    <div>
+      <div class="card"><h2>上传插件</h2>
+        <div class="row"><input ref="fileEl" type="file" accept=".smx" style="flex:1;min-width:0"><button @click="uploadFile">上传并加载</button></div>
+        <div class="mu">{{ msg }}</div>
+        <div class="note">只收 .smx（20 MB 以内），写入 plugins/ 后立即 sm plugins load；同名插件会被覆盖。</div>
+      </div>
+      <details class="card"><summary><h2>SourceMod 运行中的插件<span class="sp" /><span class="mu">sm plugins list 原始输出</span></h2></summary><pre style="max-height:44vh">{{ data.raw || '(服务器离线或无输出)' }}</pre></details>
+    </div>
+  </div></section>
 </template>
