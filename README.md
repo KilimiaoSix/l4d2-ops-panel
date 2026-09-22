@@ -69,6 +69,7 @@ cd l4d2-ops-panel/panel
 - 账号分 owner / admin：“账号”页人人可见，能改自己的密码和 Steam 绑定（改密码会登出其他设备）；owner 还能建 / 删账号、改别人的密码和绑定。其余功能两者一样，登录即拥有服务器全部操作权限，别给不该给的人；密码以 PBKDF2-SHA256 存在 `panel.db`，同 IP 连续 6 次失败锁 1 分钟，会话 7 天；登录、账号和插件操作记入 `panel.db` 的 audit 表
 - 请用 HTTPS（自带自签名或 nginx + 正式证书）；HTTP 明文在公共网络会泄露密码
 - 面板只在你自己的服务器上运行，不上报任何东西；对外的网络请求只有两类：创意工坊下载（DepotDownloader 连 Steam）和把 `steamcommunity.com/id/自定义名` 解析成 SteamID（只在你填了这种链接时发生）
+- 页面会让**浏览器**从 Google Fonts 异步加载两款字体（Barlow Condensed / IBM Plex Mono）作为渐进增强，加载不到就回退到系统字体、不阻塞显示；不想要的话删掉 `panel.py` 里 `PAGE` 中那行 `fonts.googleapis.com` 的 `<link>` 即可
 
 ## 许可
 
