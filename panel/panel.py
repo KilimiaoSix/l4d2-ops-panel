@@ -1032,29 +1032,43 @@ code{font-family:var(--fm);font-size:12px;background:var(--sur2);padding:2px 6px
 #side nav button svg{width:18px;height:18px;flex:none;opacity:.75}
 #side nav button:hover{background:var(--sur2);color:var(--tx)}
 #side nav button.on{background:#2e2620;color:var(--ac2);box-shadow:inset 3px 0 0 var(--ac)}#side nav button.on svg{opacity:1;color:var(--ac)}
-.foot{margin-top:auto;padding:12px 4px 0;border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:6px}
-.foot code{background:none;padding:0;font-size:11.5px;color:var(--tx);word-break:break-all}
 /* main + header */
-#main{flex:1;min-width:0;padding:22px 28px 48px;max-width:1240px}
+#main{flex:1;min-width:0;display:flex;flex-direction:column;padding:22px 28px 0;max-width:1240px}
 header{display:flex;align-items:flex-end;gap:14px;padding:0 0 16px;border-bottom:1px solid var(--bd);margin-bottom:18px;flex-wrap:wrap}
 header .ttl{display:flex;flex-direction:column;gap:5px}
 header h1{font-size:24px;margin:0;font-weight:700;line-height:1.15}
 header .meta{display:flex;align-items:center;gap:10px;color:var(--mu);font-size:12px;flex-wrap:wrap}
 header .meta svg{width:14px;height:14px}
-.view{display:none}.view.on{display:block}
+.view{display:none}.view.on{display:block;padding-bottom:14px}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .view.on>*{animation:rise .32s ease both}.view.on>*:nth-child(2){animation-delay:.05s}.view.on>*:nth-child(3){animation-delay:.1s}.view.on>*:nth-child(4){animation-delay:.15s}
 /* status band + cards */
-.band{display:grid;grid-template-columns:1fr 1.55fr 1fr 1fr 1.05fr 1.1fr;gap:1px;background:var(--bd);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;margin-bottom:16px}
+.band{display:grid;grid-template-columns:1fr 1.55fr 1fr 1fr 1.05fr 1.1fr;gap:1px;background:var(--bd);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;margin-bottom:16px}.band.sys{grid-template-columns:repeat(4,minmax(0,1fr))}
 .tile{background:var(--sur);padding:14px 16px 13px;min-width:0}
 .tile .v{font-family:var(--fd);font-weight:700;font-size:30px;line-height:1.1;margin-top:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
-.tile .v.mono{font-family:var(--fm);font-weight:500;font-size:15px;line-height:1.35;margin-top:11px}
+.tile .v.mono{font-family:var(--fm);font-weight:500;font-size:15px;line-height:1.35;margin-top:11px}.tile .v.cn{font-family:var(--fb);font-size:22px;margin-top:11px}
 .tile .s{font-size:11.5px;color:var(--mu);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.card{background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:16px 18px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px}.grid>.card{margin-bottom:0}.grid>div>.card{margin-bottom:16px}.grid>div>.card:last-child{margin-bottom:0}
+.grid.pl{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);align-items:start}.grid.pl.nowl{grid-template-columns:minmax(0,1fr)}
+.grid.pg{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);align-items:start}.grid.acct{grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))}
+.card{background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:16px 18px;margin-bottom:16px}div.card{display:flex;flex-direction:column}
+.card.tool{flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px 14px}.card.tool h2{margin:0}.card.tool select{flex:1;min-width:220px}.card.tool .mu{flex:1 0 auto}
+.mt{display:none}.mt.on{display:block}
 .card h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:10px;font-weight:600;flex-wrap:wrap}
 .card h2::before{content:"";width:4px;height:15px;background:var(--ac);border-radius:1px;flex:none}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0}.lbl{color:var(--mu);font-size:12px;min-width:44px}
+/* note tray: a card's closing remarks, one band across the bottom of the card */
+.note{--ng:14px;position:relative;margin:auto -18px -16px;padding:calc(var(--ng) + 11px) 18px 11px 40px;border-radius:0 0 var(--r) var(--r);background:linear-gradient(to bottom,transparent var(--ng),var(--bd) var(--ng),var(--bd) calc(var(--ng) + 1px),rgba(0,0,0,.14) calc(var(--ng) + 1px));color:var(--mu);font-size:12px;line-height:1.6}
+.note::before{content:"";position:absolute;left:18px;top:calc(var(--ng) + 13px);width:14px;height:14px;background:var(--ac);opacity:.85;-webkit-mask:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%222.2%22 stroke-linecap=%22round%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%229%22/%3E%3Cpath d=%22M12 11v5M12 7.6h.01%22/%3E%3C/svg%3E') center/contain no-repeat;mask:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%222.2%22 stroke-linecap=%22round%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%229%22/%3E%3Cpath d=%22M12 11v5M12 7.6h.01%22/%3E%3C/svg%3E') center/contain no-repeat}
+.note p{margin:0}.note p+p{margin-top:3px}.note b{color:var(--tx);font-weight:600}.note code{font-size:11.5px;padding:1px 5px}
+/* collapsible card (raw plugin list) */
+details.card summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px}details.card summary::-webkit-details-marker{display:none}
+details.card summary h2{margin:0;flex:1}details.card summary::after{content:"";width:8px;height:8px;margin:0 6px 4px 0;border-right:1.5px solid var(--mu);border-bottom:1.5px solid var(--mu);transform:rotate(45deg);transition:transform .15s}
+details.card[open] summary::after{transform:rotate(-135deg);margin:4px 6px 0 0}details.card[open] summary{margin-bottom:12px}
+/* page footer: connect address + vitals, pinned to the bottom when a page is short */
+#pfoot{margin-top:auto;display:flex;align-items:center;flex-wrap:wrap;gap:10px 28px;padding:16px 0 20px;border-top:1px solid var(--bd)}
+.fs{display:flex;align-items:center;gap:9px;min-width:0}.fs b{font-family:var(--fd);font-size:17px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fs code{background:none;padding:0;font-size:12.5px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#f-conn{gap:10px}
 label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--mu)}
 .sl{display:flex;flex-direction:column;gap:4px;margin-top:8px}.spark{width:100%;height:64px;display:block}
 .spark .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}.spark .ar{opacity:.14}.spark text{font-family:var(--fm);font-size:10px;fill:var(--mu)}.spark .last{font-weight:700;font-size:11px}
@@ -1099,8 +1113,10 @@ pre{background:var(--inp);border:1px solid var(--bd);padding:12px 14px;border-ra
 .srv{flex-direction:row;align-items:center;gap:12px;padding:6px 10px}.srv .kv .k,.srv .kv code{display:none}.kv b{font-size:15px}
 #side nav{flex-direction:row;overflow-x:auto;flex-basis:100%;gap:2px;scrollbar-width:none;padding-bottom:8px}#side nav::-webkit-scrollbar{display:none}
 #side nav button{width:auto;height:34px;padding:0 10px;font-size:13px;gap:7px}#side nav button svg{width:16px;height:16px}#side nav button.on{box-shadow:inset 0 -2px 0 var(--ac)}
-.foot{display:none}#main{padding:14px 14px 40px}header{margin-bottom:14px;padding-bottom:12px}header h1{font-size:21px}
-.band{grid-template-columns:repeat(3,minmax(0,1fr))}.tile{padding:12px 12px 11px}.tile .v{font-size:24px}.grid{grid-template-columns:1fr}.card{padding:14px}
+#main{padding:14px 14px 0}header{margin-bottom:14px;padding-bottom:12px}header h1{font-size:21px}
+.band{grid-template-columns:repeat(3,minmax(0,1fr))}.band.sys{grid-template-columns:repeat(2,minmax(0,1fr))}.tile{padding:12px 12px 11px}.tile .v{font-size:24px}.tile .v.cn{font-size:19px}.grid,.grid.pl,.grid.pg,.grid.acct{grid-template-columns:minmax(0,1fr)}.card{padding:14px}
+.note{--ng:12px;margin:auto -14px -14px;padding:calc(var(--ng) + 10px) 14px 10px 34px}.note::before{left:14px;top:calc(var(--ng) + 12px)}
+#pfoot{gap:8px 18px;padding:14px 0 18px}#f-conn{flex-basis:100%}#f-conn code{flex:1}
 button.sm{height:34px}
 }
 @container shell (max-width:480px){.band{grid-template-columns:repeat(2,minmax(0,1fr))}header .meta{width:100%}}
@@ -1136,7 +1152,6 @@ BODY = r"""
 <button data-v="server" onclick="nav('server')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg>服务器</button>
 <button data-v="accounts" onclick="nav('accounts')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M15 12v2"/></svg>账号</button>
 </nav>
-<div class="foot" id="sidefoot" style="display:none"><span class="k">连接地址</span><code id="sidehost"></code></div>
 </aside>
 <div id="main">
 <header><div class="ttl"><div class="eyebrow" id="veyebrow">Overview</div><h1 id="vtitle">概览</h1></div><span class="sp"></span><div class="meta"><span>刷新于 <span id="ts">—</span></span><button id="who" class="g sm" title="我的账号" onclick="nav('accounts')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg><span id="who-name"></span></button><button class="g sm" onclick="logout()">退出</button></div></header>
@@ -1154,37 +1169,34 @@ BODY = r"""
 <div class="card"><h2>在线玩家<span class="sp"></span><button class="g sm" onclick="nav('players')">管理</button></h2><div class="tw"><table id="players-mini"></table></div></div></div>
 </section>
 
-<section class="view" id="v-players">
+<section class="view" id="v-players"><div class="grid pl" id="pl-grid">
 <div class="card"><h2>在线玩家<span class="sp"></span><button class="g sm" onclick="loadPlayers()">刷新</button></h2><div class="tw"><table id="players"></table></div></div>
 <div class="card" data-f="whitelist"><h2>白名单<span class="sp"></span><span id="wlcount" class="mu"></span></h2>
 <div class="row" style="margin-bottom:6px"><button type="button" id="sw-wl" class="sw dis" aria-label="白名单开关" onclick="wlToggle()"></button><span id="wl-state" class="mu">读取中…</span></div>
 <div class="hint" style="margin:0 0 12px">开启 = 只有名单里的人和管理员能进；关闭 = 任何人都能进（临时给朋友开门时用，加完人记得开回来）。</div>
-<div class="row"><input id="wlid" placeholder="SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:180px"><input id="wlnote" placeholder="备注" style="width:120px"><button onclick="wl('add')">添加</button></div><div id="wllist"></div></div>
-</section>
+<div class="row"><input id="wlid" placeholder="SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:150px"><input id="wlnote" placeholder="备注" style="width:90px"><button onclick="wl('add')">添加</button></div><div id="wllist"></div></div>
+</div></section>
 
-<section class="view" id="v-game">
-<div class="card" data-f="preset"><h2>特感强度</h2><div class="row"><span class="seg" id="seg-preset"><button onclick="preset('auto')">auto</button><button onclick="preset('te8')">te8</button><button onclick="preset('te12')">te12</button><button onclick="preset('te16')">te16</button></span></div><div class="hint">auto = 按存活人数 4→16 只自动缩放；te8/te12/te16 = 固定数量。切换立即生效并保存，换图、重启都保持。</div></div>
-<div class="card"><h2>难度</h2><div class="row"><span class="seg" id="seg-diff"><button data-v="easy" onclick="diff('easy')">简单</button><button data-v="normal" onclick="diff('normal')">普通</button><button data-v="hard" onclick="diff('hard')">高级</button><button data-v="impossible" onclick="diff('impossible')">专家</button></span></div><div class="hint">即时生效，并跨换图保持（默认专家，由 Force Difficulty 插件维持）；已刷出的 Tank 血量不变。</div></div>
-<div class="card"><h2>伤害</h2><div class="row"><label>友伤 <input id="dmg-ff" type="number" min="0" max="1" step="0.05" style="width:86px"></label><label>火焰伤害 <input id="dmg-burn" type="number" min="0" max="1" step="0.05" style="width:86px"></label><button onclick="damage()">应用</button></div><div class="hint">0 = 无伤害，1 = 全额。即时生效并写入 server.cfg（重启保持）。四个难度档位统一设为同一值，所以投票换难度后也不变；游戏默认友伤 0.1/0.3/0.5、火焰 0.2/0.2/0.4/1。</div></div>
-<div class="card" data-f="points"><h2>发放积分</h2><div class="row"><select id="ptarget" style="flex:1;min-width:0" onchange="document.getElementById('pcustom').style.display=this.value==='__custom'?'':'none'"><option value="@all">全体在线玩家</option></select><input id="pcustom" placeholder="玩家名 / #userid" style="width:140px;display:none"><input id="pamount" type="number" value="300" style="width:96px"><button onclick="points()">发放</button></div><div class="hint">通过 Points System 的 sm_givepoints 发放。</div></div>
-</section>
+<section class="view" id="v-game"><div class="grid">
+<div class="card" data-f="preset"><h2>特感强度</h2><div class="row"><span class="seg" id="seg-preset"><button onclick="preset('auto')">auto</button><button onclick="preset('te8')">te8</button><button onclick="preset('te12')">te12</button><button onclick="preset('te16')">te16</button></span></div><div class="note">auto = 按存活人数 4→16 只自动缩放；te8 / te12 / te16 = 固定数量。切换立即生效并保存，换图、重启都保持。</div></div>
+<div class="card"><h2>难度</h2><div class="row"><span class="seg" id="seg-diff"><button data-v="easy" onclick="diff('easy')">简单</button><button data-v="normal" onclick="diff('normal')">普通</button><button data-v="hard" onclick="diff('hard')">高级</button><button data-v="impossible" onclick="diff('impossible')">专家</button></span></div><div class="note">即时生效，并跨换图保持（默认专家，由 Force Difficulty 插件维持）；已刷出的 Tank 血量不变。</div></div>
+<div class="card"><h2>伤害</h2><div class="row"><label>友伤 <input id="dmg-ff" type="number" min="0" max="1" step="0.05" style="width:86px"></label><label>火焰伤害 <input id="dmg-burn" type="number" min="0" max="1" step="0.05" style="width:86px"></label><button onclick="damage()">应用</button></div><div class="note"><p>0 = 无伤害，1 = 全额；即时生效并写入 server.cfg，重启保持。</p><p>四个难度档位统一设为同一值，投票换难度后也不变；游戏默认友伤 0.1 / 0.3 / 0.5，火焰 0.2 / 0.2 / 0.4 / 1。</p></div></div>
+<div class="card" data-f="points"><h2>发放积分</h2><div class="row"><select id="ptarget" style="flex:1;min-width:0" onchange="document.getElementById('pcustom').style.display=this.value==='__custom'?'':'none'"><option value="@all">全体在线玩家</option></select><input id="pcustom" placeholder="玩家名 / #userid" style="width:140px;display:none"><input id="pamount" type="number" value="300" style="width:96px"><button onclick="points()">发放</button></div><div class="note">通过 Points System 的 <code>sm_givepoints</code> 发放。</div></div>
+</div></section>
 
 <section class="view" id="v-maps">
-<div class="card"><h2>切换地图</h2><div class="row"><select id="map" style="flex:1;min-width:0"></select><button onclick="changemap()">切换</button></div><div class="hint">官方 14 个战役 + 已安装的自定义战役。切换会丢失当前进度。</div></div>
-<div class="card"><h2>自定义战役<span class="sp"></span><button class="g sm" onclick="loadAddons()">刷新</button></h2>
-<div class="row" data-f="workshop"><span class="lbl">工坊</span><input id="wsid" placeholder="创意工坊 ID 或链接" style="flex:1;min-width:0"><button onclick="workshop()">下载安装</button></div>
-<div class="row"><span class="lbl">上传</span><input type="file" id="vpkfile" accept=".vpk,.zip" style="flex:1;min-width:0"><button onclick="upload()">上传</button></div>
-<div id="upmsg" class="mu"></div><div id="addons" style="margin-top:8px"></div>
-<div class="hint">装完自动热加载，不用重启。玩家客户端也要订阅同一个创意工坊物品，否则进不了自定义战役。上传 zip（例如 gamemaps.com 下载的压缩包）会自动解压出里面的 vpk；不含地图（maps/*.bsp）的 vpk 一律拒收。</div></div>
-<div class="card" data-f="workshop_search"><h2>在创意工坊找战役</h2>
-<div class="row"><input id="wsq" placeholder="战役名或关键字，留空 = 订阅最多的战役" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter')wsSearch()"><button onclick="wsSearch()">搜索</button></div>
-<div id="wsres" style="margin-top:8px"></div>
-<div class="hint">只列出带 Campaigns 标签的物品；点“安装”走上面的工坊下载通道，装前同样检查 vpk 里有没有地图。</div></div>
+<div class="card tool"><h2>切换地图</h2><select id="map"></select><button onclick="changemap()">切换</button><span class="mu">官方 14 个战役 + 已安装的自定义战役；切换会丢失当前进度</span></div>
+<div class="card"><h2>安装新战役<span class="sp"></span><span class="tabs" id="mtabs"><button class="on" onclick="mtab('ws',this)" data-f="workshop">工坊 ID / 链接</button><button onclick="mtab('up',this)">上传 vpk / zip</button><button onclick="mtab('search',this)" data-f="workshop_search">搜索创意工坊</button></span></h2>
+<div class="mt on" id="mt-ws"><div class="row"><input id="wsid" placeholder="创意工坊 ID 或链接" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter')workshop()"><button onclick="workshop()">下载安装</button></div><div class="note">直连 Steam CDN 分块下载，完成后自动安装、热加载，不用重启；玩家客户端也要订阅同一个创意工坊物品，否则进不了自定义战役。</div></div>
+<div class="mt" id="mt-up"><div class="row"><input type="file" id="vpkfile" accept=".vpk,.zip" style="flex:1;min-width:0"><button onclick="upload()">上传</button></div><div id="upmsg" class="mu"></div><div class="note">zip（例如 gamemaps.com 下载的压缩包）会自动解压出里面的 vpk；不含地图（maps/*.bsp）的 vpk 一律拒收。</div></div>
+<div class="mt" id="mt-search"><div class="row"><input id="wsq" placeholder="战役名或关键字，留空 = 订阅最多的战役" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter')wsSearch()"><button onclick="wsSearch()">搜索</button></div><div id="wsres" style="margin-top:8px"></div><div class="note">只列出带 Campaigns 标签的物品；点“安装”走工坊下载通道，装前同样检查 vpk 里有没有地图。</div></div></div>
+<div class="card"><h2>已安装的自定义战役<span class="sp"></span><button class="g sm" onclick="loadAddons()">刷新</button></h2><div id="addons"></div>
+<div class="note">切到第一章会丢失当前进度；打包下载 = 把 vpk 压成 zip 给玩家手动安装；受保护的 vpk 不提供删除。</div></div>
 </section>
 
 <section class="view" id="v-console">
 <div class="card"><h2>RCON 控制台</h2><div class="row"><input id="cmd" placeholder="status · sm plugins list · sm_cvar z_difficulty · sm_wl_list …" style="flex:1;font-family:var(--fm)" onkeydown="if(event.key==='Enter')rcon();if(event.key==='ArrowUp'&&hist.length){this.value=hist[hist.length-1]}"><button onclick="rcon()">发送</button></div><pre id="rout" style="max-height:60vh">(输出显示在这里)</pre>
-<div class="hint">隐藏 cvar（z_common_limit、nb_update_frequency、sv_airaccelerate 等）要写 <code>sm_cvar 名字 [值]</code>。↑ 取回上一条命令。</div></div>
+<div class="note">隐藏 cvar（z_common_limit、nb_update_frequency、sv_airaccelerate 等）要写 <code>sm_cvar 名字 [值]</code>。↑ 取回上一条命令。</div></div>
 </section>
 
 <section class="view" id="v-logs">
@@ -1192,32 +1204,45 @@ BODY = r"""
 </section>
 
 <section class="view" id="v-server">
-<div class="card" data-f="lgsm"><h2>服务器控制<span class="sp"></span><span id="actmsg" class="mu"></span></h2><div class="row"><button onclick="act('restart')">重启</button><button class="g" onclick="act('start')">启动</button><button class="d" onclick="act('stop')">停止</button><button class="g" onclick="act('monitor')">巡检</button></div><div class="hint">重启约 1 分钟；有玩家在线时会断开所有人。</div></div>
-<div class="card"><h2>系统</h2><div id="sysinfo" class="mu">-</div></div>
-<div class="card" id="conninfo" style="display:none"><h2>连接信息</h2><div class="mu">游戏：<code id="connhost"></code></div></div>
+<div class="card" data-f="lgsm"><h2>服务器控制<span class="sp"></span><span id="actmsg" class="mu"></span></h2><div class="row"><button onclick="act('restart')">重启</button><button class="g" onclick="act('start')">启动</button><button class="d" onclick="act('stop')">停止</button><button class="g" onclick="act('monitor')">巡检</button></div><div class="note">重启约 1 分钟；有玩家在线时会断开所有人。</div></div>
+<div class="band sys">
+<div class="tile"><div class="k">系统负载</div><div class="v" id="sy-load">-</div><div class="s" id="sy-load-s"></div></div>
+<div class="tile"><div class="k">内存</div><div class="v" id="sy-mem">-</div><div class="s" id="sy-mem-s"></div></div>
+<div class="tile"><div class="k">系统已运行</div><div class="v" id="sy-up">-</div><div class="s">自上次开机</div></div>
+<div class="tile"><div class="k">游戏进程</div><div class="v cn" id="sy-proc">-</div><div class="s">srcds_linux</div></div>
+</div>
 </section>
 
-<section class="view" id="v-plugins">
-<div class="card"><h2>插件管理<span class="sp"></span><button class="g sm" onclick="loadPlugins()">刷新</button></h2>
-<div class="row"><span class="lbl">上传</span><input type="file" id="smxfile" accept=".smx" style="flex:1;min-width:0"><button onclick="uploadSmx()">上传并加载</button></div><div id="smxmsg" class="mu"></div>
-<div id="plugins" style="margin-top:8px"></div>
-<div class="hint">启用/禁用 = 移动 disabled/ 目录 + 热加载，立即生效；受保护的核心插件不可禁用/删除。删除只能删已禁用的。</div></div>
-<div class="card"><h2>SourceMod 运行中的插件（原始列表）</h2><pre id="plugins-raw" style="max-height:44vh">-</pre></div>
-</section>
+<section class="view" id="v-plugins"><div class="grid pg">
+<div class="card"><h2>插件列表<span class="sp"></span><button class="g sm" onclick="loadPlugins()">刷新</button></h2><div id="plugins"></div>
+<div class="note">启用 / 禁用 = 移动 disabled/ 目录 + 热加载，立即生效；受保护的核心插件不可禁用、删除。删除只能删已禁用的。</div></div>
+<div>
+<div class="card"><h2>上传插件</h2><div class="row"><input type="file" id="smxfile" accept=".smx" style="flex:1;min-width:0"><button onclick="uploadSmx()">上传并加载</button></div><div id="smxmsg" class="mu"></div>
+<div class="note">只收 .smx（20 MB 以内），写入 plugins/ 后立即 sm plugins load；同名插件会被覆盖。</div></div>
+<details class="card"><summary><h2>SourceMod 运行中的插件<span class="sp"></span><span class="mu">sm plugins list 原始输出</span></h2></summary><pre id="plugins-raw" style="max-height:44vh">-</pre></details>
+</div></div></section>
 
-<section class="view" id="v-accounts">
+<section class="view" id="v-accounts"><div class="grid acct">
 <div class="card"><h2>我的账号<span class="sp"></span><span id="me-info" class="mu"></span></h2>
 <div class="row"><input id="me-cur" type="password" placeholder="当前密码" autocomplete="current-password" style="width:140px"><input id="me-new" type="password" placeholder="新密码" autocomplete="new-password" style="width:140px"><input id="me-new2" type="password" placeholder="再输一次新密码" autocomplete="new-password" style="width:150px"><button onclick="changePw()">修改密码</button></div>
 <div class="row"><input id="me-steam" placeholder="绑定 Steam（留空 = 解绑）：SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:200px"><button onclick="bindSteam()">保存绑定</button></div>
-<div class="hint">改密码后其他设备上的登录会失效；绑定 Steam 后会写入游戏管理员（admins_simple.ini 的面板托管块）并热重载。</div></div>
-<div class="card" data-owner style="display:none"><h2>面板账号<span class="sp"></span><button class="g sm" onclick="loadAccounts()">刷新</button></h2>
-<div class="hint" style="margin:0 0 10px">owner 可管理账号。绑定 SteamID 后，该账号会自动写入游戏管理员（admins_simple.ini 的面板托管块）并热重载，一处管两边。</div>
-<div class="tw"><table id="accounts"></table></div></div>
+<div class="note">改密码后其他设备上的登录会失效；绑定 Steam 后会写入游戏管理员（admins_simple.ini 的面板托管块）并热重载。</div></div>
 <div class="card" data-owner style="display:none"><h2>新建账号</h2>
 <div class="row"><input id="na-user" placeholder="用户名" style="width:140px"><input id="na-pw" type="password" placeholder="密码" style="width:140px"><select id="na-role" style="width:96px"><option value="admin">admin</option><option value="owner">owner</option></select></div>
 <div class="row"><input id="na-steam" placeholder="绑定 Steam（可空）：SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:200px"><input id="na-flags" value="99:z" style="width:86px"><button onclick="createAccount()">创建</button></div>
-<div class="hint">绑定 Steam 支持：<code>STEAM_1:1:xxx</code>、<code>[U:1:xxx]</code>、17 位好友码、<code>steamcommunity.com/profiles/…</code> 或 <code>/id/自定义名</code>（自定义名需服务器能连 steamcommunity）。权限位：<code>z</code>=全部管理员权限，前面的数字是免疫等级；留空默认 <code>99:z</code>。</div></div>
+<div class="note"><p><b>绑定 Steam</b> 支持 <code>STEAM_1:1:xxx</code>、<code>[U:1:xxx]</code>、17 位好友码、<code>steamcommunity.com/profiles/…</code> 或 <code>/id/自定义名</code>（自定义名需服务器能连 steamcommunity）。</p><p><b>权限位</b> <code>z</code> = 全部管理员权限，前面的数字是免疫等级；留空默认 <code>99:z</code>。</p></div></div>
+</div>
+<div class="card" data-owner style="display:none"><h2>面板账号<span class="sp"></span><button class="g sm" onclick="loadAccounts()">刷新</button></h2>
+<div class="hint" style="margin:0 0 10px">owner 可管理账号。绑定 SteamID 后，该账号会自动写入游戏管理员（admins_simple.ini 的面板托管块）并热重载，一处管两边。</div>
+<div class="tw"><table id="accounts"></table></div></div>
 </section>
+<footer id="pfoot">
+<div class="fs" id="f-conn" style="display:none"><span class="k">连接地址</span><code id="f-host"></code><button class="g sm" onclick="copyConn()">复制</button></div>
+<span class="sp"></span>
+<div class="fs"><span class="k">负载</span><b id="f-load">-</b></div>
+<div class="fs"><span class="k">内存</span><b id="f-mem">-</b></div>
+<div class="fs"><span class="k">游戏进程</span><b id="f-proc">-</b></div>
+</footer>
 </div></div></div>
 <div id="toast"></div>
 """
@@ -1243,10 +1268,14 @@ async function logout(){await api('/api/logout',{});show(false)}
 function set(id,v){document.getElementById(id).textContent=v}
 async function status(){try{const s=await api('/api/status');const sys=s.sys||{};const pill=document.getElementById('pill');pill.className='pill '+(s.online?'on':'off');pill.lastElementChild.textContent=s.online?'在线':(s.srcds?'进程在，游戏未响应':'离线');
 set('side-map',s.online?s.map:'—');set('side-players',s.online?`${s.players} / ${s.max}`:'—');
-set('t-players',s.online?`${s.players} / ${s.max}`:'-');set('t-bots',s.online?`bot ${s.bots}`:'');set('t-map',s.online?s.map:'-');set('t-name',s.online?s.name:'');set('t-preset',s.preset||'-');set('t-diff','难度 '+(DIFF[s.difficulty]||'-')+' · 白名单'+(s.whitelist===null?'?':s.whitelist?'开':'关'));set('sysinfo',sys.load?`负载 ${sys.load} ｜ 内存 ${sys.mem_used_mb}/${sys.mem_total_mb} MB ｜ 系统已运行 ${sys.uptime_h} h ｜ 游戏进程 ${s.srcds?'运行中':'未运行'}`:'-');
+set('t-players',s.online?`${s.players} / ${s.max}`:'-');set('t-bots',s.online?`bot ${s.bots}`:'');set('t-map',s.online?s.map:'-');set('t-name',s.online?s.name:'');set('t-preset',s.preset||'-');set('t-diff','难度 '+(DIFF[s.difficulty]||'-')+' · 白名单'+(s.whitelist===null?'?':s.whitelist?'开':'关'));const load=sys.load?sys.load.split(' '):[],memPct=sys.mem_total_mb?Math.round(100*sys.mem_used_mb/sys.mem_total_mb)+'%':'-',proc=s.srcds?'运行中':'未运行';
+set('f-load',load[0]||'-');set('f-mem',memPct);set('f-proc',proc);set('sy-load',load[0]||'-');set('sy-load-s',load.length>2?`5 分钟 ${load[1]} · 15 分钟 ${load[2]}`:'');set('sy-mem',memPct);set('sy-mem-s',sys.mem_total_mb?`${sys.mem_used_mb} / ${sys.mem_total_mb} MB`:'');set('sy-up',sys.uptime_h!=null?fmtUp(sys.uptime_h):'-');set('sy-proc',proc);
 document.querySelectorAll('#seg-preset button').forEach(b=>b.classList.toggle('on',b.textContent===s.preset));document.querySelectorAll('#seg-diff button').forEach(b=>b.classList.toggle('on',b.dataset.v===s.difficulty));for(const [id,k] of [['dmg-ff','ff'],['dmg-burn','burn']]){const e=document.getElementById(id);if(e&&document.activeElement!==e&&s[k]!=null)e.value=s[k]}
 set('t-fps',s.perf?s.perf.fps:'-');set('t-out',s.perf?s.perf.out_kb+' KB/s':'-');set('t-load',sys.load?sys.load.split(' ')[0]:'-');set('t-mem',sys.mem_used_mb?`内存 ${sys.mem_used_mb}/${sys.mem_total_mb} MB · 已运行 ${sys.uptime_h} h`:'');
-if(s.whitelist!==undefined){wlOn=s.whitelist;renderSw()}if(s.features){document.querySelectorAll('[data-f]').forEach(e=>e.style.display=s.features[e.dataset.f]?'':'none')}if(s.title){set('brand',s.title);document.title=s.title}if(s.display_host){set('sidehost',s.display_host);document.getElementById('sidefoot').style.display='';set('connhost','connect '+s.display_host);document.getElementById('conninfo').style.display=''}if(s.account){const wasOwner=myRole==='owner';myRole=s.account.role;set('who-name',s.account.user+(myRole==='owner'?' · owner':''));document.querySelectorAll('[data-owner]').forEach(e=>e.style.display=myRole==='owner'?'':'none');if(myRole==='owner'&&!wasOwner&&document.getElementById('v-accounts').classList.contains('on'))loadAccounts()}set('ts',new Date().toLocaleTimeString());set('actmsg',(s.action.running?'正在执行 '+s.action.running+'… ':'')+(s.action.last||''))}catch(e){}}
+if(s.whitelist!==undefined){wlOn=s.whitelist;renderSw()}if(s.features){document.querySelectorAll('[data-f]').forEach(e=>e.style.display=s.features[e.dataset.f]?'':'none');document.getElementById('pl-grid').classList.toggle('nowl',!s.features.whitelist)}if(s.title){set('brand',s.title);document.title=s.title}if(s.display_host){set('f-host','connect '+s.display_host);document.getElementById('f-conn').style.display=''}if(s.account){const wasOwner=myRole==='owner';myRole=s.account.role;set('who-name',s.account.user+(myRole==='owner'?' · owner':''));document.querySelectorAll('[data-owner]').forEach(e=>e.style.display=myRole==='owner'?'':'none');if(myRole==='owner'&&!wasOwner&&document.getElementById('v-accounts').classList.contains('on'))loadAccounts()}set('ts',new Date().toLocaleTimeString());set('actmsg',(s.action.running?'正在执行 '+s.action.running+'… ':'')+(s.action.last||''))}catch(e){}}
+function mtab(k,btn){document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('on',b===btn));document.querySelectorAll('.mt').forEach(e=>e.classList.toggle('on',e.id==='mt-'+k))}
+function fmtUp(h){const t=Math.round(h);return t>=48?Math.floor(t/24)+' d '+(t%24)+' h':h+' h'}
+async function copyConn(){const t=document.getElementById('f-host').textContent;try{if(navigator.clipboard&&window.isSecureContext)await navigator.clipboard.writeText(t);else{const ta=document.createElement('textarea');ta.value=t;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}toast('已复制：'+t)}catch(e){toast('复制失败，请手动选中文本复制',true)}}
 async function act(n){const names={restart:'重启',start:'启动',stop:'停止',monitor:'巡检'};if(n!=='monitor'&&!confirm('确定'+names[n]+'服务器？'))return;await run('/api/action',{name:n},'已开始'+names[n]);setTimeout(status,2000);setTimeout(status,20000)}
 async function preset(n){await run('/api/preset',{name:n},'特感预设已切换为 '+n);status()}
 async function damage(){const o={};for(const [id,k] of [['dmg-ff','ff'],['dmg-burn','burn']]){const v=document.getElementById(id).value;if(v!=='')o[k]=+v}if(!Object.keys(o).length){toast('请填写至少一项',true);return}const j=await run('/api/damage',o,'伤害已更新'+(o.ff!=null?'：友伤 '+o.ff:'')+(o.burn!=null?'，火焰 '+o.burn:''));if(j&&j.persisted===false)toast('已生效，但 server.cfg 未写入（看控制台输出）',true);status()}
@@ -1256,8 +1285,8 @@ function renderTargets(pl){const sel=document.getElementById('ptarget'),cur=sel.
 async function points(){const sel=document.getElementById('ptarget');let t=sel.value,label=sel.options[sel.selectedIndex].textContent;if(t==='__custom'){t=document.getElementById('pcustom').value.trim();label=t;if(!t){toast('请输入玩家名或 #userid',true);return}}const a=+document.getElementById('pamount').value;if(!a){toast('请输入分数',true);return}await run('/api/points',{target:t,amount:a},`已给 ${label} 发 ${a} 分`)}
 let wlOn=null;function renderSw(){const sw=document.getElementById('sw-wl');sw.className='sw'+(wlOn===null?' dis':wlOn?' on':'');sw.setAttribute('aria-pressed',wlOn?'true':'false');set('wl-state',wlOn===null?'未知（服务器离线）':wlOn?'已开启：仅名单内可进':'已关闭：所有人可进')}
 async function wlToggle(){if(wlOn===null)return;const v=!wlOn;if(!v&&!confirm('关闭白名单后任何人都能进服，确定？'))return;await run('/api/whitelist_enable',{enable:v},v?'白名单已开启':'白名单已关闭，现在所有人可进');wlOn=v;renderSw()}
-async function loadPlayers(){try{const d=await api('/api/players');renderTargets(d.players);const mini=document.getElementById('players-mini');mini.innerHTML='<tr><th>名字</th><th>在线</th><th>延迟</th></tr>'+(d.players.length?d.players.map(p=>`<tr><td>${esc(p.name)}</td><td class="mu">${esc(p.time)}</td><td class="mu">${esc(p.ping)} ms</td></tr>`).join(''):'<tr><td colspan=3 class="mu">当前没有玩家</td></tr>');const t=document.getElementById('players');t.innerHTML='<tr><th>名字</th><th>SteamID</th><th>在线</th><th>延迟</th><th></th></tr>'+(d.players.length?d.players.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td><code class="mu">${esc(p.steamid)}</code></td><td class="mu">${esc(p.time)}</td><td class="mu">${esc(p.ping)} ms</td><td class="act">
-<button class="g sm" onclick="givep('${esc(p.name)}')">发分</button> <button class="g sm" onclick="wladd('${esc(p.steamid)}','${esc(p.name)}')">加白</button> <button class="d sm" onclick="kick(${p.userid},'${esc(p.name)}')">踢</button></td></tr>`).join(''):'<tr><td colspan=5 class="mu">当前没有玩家</td></tr>')}catch(e){}}
+async function loadPlayers(){try{const d=await api('/api/players');renderTargets(d.players);const mini=document.getElementById('players-mini');mini.innerHTML='<tr><th>名字</th><th>在线</th><th>延迟</th></tr>'+(d.players.length?d.players.map(p=>`<tr><td>${esc(p.name)}</td><td class="mu">${esc(p.time)}</td><td class="mu">${esc(p.ping)} ms</td></tr>`).join(''):'<tr><td colspan=3 class="mu">当前没有玩家</td></tr>');const t=document.getElementById('players');t.innerHTML='<tr><th>名字</th><th>在线</th><th>延迟</th><th></th></tr>'+(d.players.length?d.players.map(p=>`<tr><td><b>${esc(p.name)}</b><div><code class="mu">${esc(p.steamid)}</code></div></td><td class="mu">${esc(p.time)}</td><td class="mu">${esc(p.ping)} ms</td><td class="act">
+<button class="g sm" onclick="givep('${esc(p.name)}')">发分</button> <button class="g sm" onclick="wladd('${esc(p.steamid)}','${esc(p.name)}')">加白</button> <button class="d sm" onclick="kick(${p.userid},'${esc(p.name)}')">踢</button></td></tr>`).join(''):'<tr><td colspan=4 class="mu">当前没有玩家</td></tr>')}catch(e){}}
 async function givep(n){const a=prompt('给 '+n+' 发多少分？','200');if(a)await run('/api/points',{target:n,amount:+a},'已发放')}
 async function wladd(id,n){await run('/api/whitelist',{op:'add',steamid:id,note:n},'已加入白名单：'+n);loadWl()}
 async function kick(u,n){if(!confirm('踢出 '+n+'？'))return;await run('/api/kick',{userid:u},'已踢出');setTimeout(loadPlayers,1500)}
