@@ -18,6 +18,9 @@
   "console_log": "/home/l4d2server/log/console/l4d2server-console.log",
   "perf_csv": "/home/l4d2server/log/perf-samples.csv",
   "depotdownloader": "/home/l4d2server/tools/depotdownloader/DepotDownloader",
+  "steam_api_base": "https://api.steampowered.com",
+  "workshop_connections": 8,
+  "workshop_retries": 8,
 
   "panel_title": "L4D2 运维面板",
   "display_host": "l4d2.example.com",
