@@ -8,3 +8,4 @@ __pycache__/
 panel/panel.db
 panel/panel.db-*
 panel/downloads/
+.pytest_cache/

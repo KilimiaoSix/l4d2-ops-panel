@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "game(**kwargs): keyword arguments for the FakeGame fixture (password, a2s_challenge, ...)",
+    "panel(**overrides): panel.json overrides for the panel fixture",
+]

@@ -926,7 +926,7 @@ class H(BaseHTTPRequestHandler):
                     audit(ac['username'], 'account.update', str(aid)); return self.send_json({'ok': True, 'out': sync_sm_admins()})
                 return self.send_json({'error': 'bad op'}, 400)
             return self.send_json({'error': 'not found'}, 404)
-        except AssertionError as e:
+        except (AssertionError, ValueError) as e:   # bad input (plugin_action / parse_steamid / int() raise ValueError): the client's fault, not a 500
             return self.send_json({'error': str(e) or 'bad request'}, 400)
         except Exception as e:
             return self.send_json({'error': str(e)}, 500)
