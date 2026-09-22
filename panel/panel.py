@@ -163,12 +163,20 @@ def lgsm(action):
     if ACTION['running']: return False
     threading.Thread(target=work, daemon=True).start(); return True
 
+# (2026-09-22) real L4D2 `status` rows: humans carry an extra number between userid and name, bots have no
+# connected/ping/loss at all — `# 26 1 "name" STEAM_1:0:x 05:40 99 0 active 30000 ip:port` / `#27 "Coach" BOT active`.
+# The old pattern expected `# 26 "name" ...`, so the panel never listed anyone. Bots stay out of the list;
+# their count comes from the `players : N humans, M bots (K max)` line.
+STATUS_ROW = re.compile(r'^#\s*(\d+)\s+(?:\d+\s+)?"(.*)"\s+(STEAM_\S+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\w+)')
+STATUS_SUMMARY = re.compile(r'^players\s*:\s*(\d+)\s+humans?,\s*(\d+)\s+bots?\s*\((\d+)\s+max\)', re.M)
+def parse_status(out):
+    """RCON `status` text -> (human rows, {'humans', 'bots', 'max', 'map'}); unknown counts are 0."""
+    rows = [dict(zip(('userid', 'name', 'steamid', 'time', 'ping', 'loss', 'state'), m.groups())) for m in map(STATUS_ROW.match, out.splitlines()) if m]
+    s = STATUS_SUMMARY.search(out); mm = re.search(r'^map\s*:\s*(\S+)', out, re.M)
+    return rows, {'humans': int(s.group(1)) if s else len(rows), 'bots': int(s.group(2)) if s else 0, 'max': int(s.group(3)) if s else 0, 'map': mm.group(1) if mm else ''}
+
 def players():
-    out = Rcon.run('status'); res = []
-    for l in out.splitlines():
-        m = re.match(r'^#\s*(\d+)\s+"(.*)"\s+(STEAM_\S+|BOT)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\w+)', l)
-        if m: res.append({'userid': m.group(1), 'name': m.group(2), 'steamid': m.group(3), 'time': m.group(4), 'ping': m.group(5), 'loss': m.group(6), 'state': m.group(7)})
-    return res, out
+    out = Rcon.run('status'); rows, summary = parse_status(out); return rows, summary, out
 
 def read_whitelist():
     try: return [l.rstrip('\n') for l in open(WHITELIST, encoding='utf-8', errors='replace') if l.strip() and not l.strip().startswith('//')]
@@ -657,8 +665,8 @@ class H(BaseHTTPRequestHandler):
                 st = a2s(); st['srcds'] = subprocess.run(['pgrep', '-f', 'srcds_linux'], capture_output=True).returncode == 0
                 if not st['online'] and st['srcds']:   # (2026-09-19) A2S throttled but process is up: confirm via RCON instead of reporting "not responding"
                     try:
-                        pl, raw = players(); humans = [x for x in pl if x['steamid'] != 'BOT']; mm = re.search(r'^map\s*:\s*(\S+)', raw, re.M)
-                        st.update(online=True, degraded=True, name=A2S_CACHE.get('name', CONF['panel_title']), map=(A2S_CACHE.get('map') or (mm.group(1) if mm else '?')), players=len(humans), bots=len(pl) - len(humans), max=A2S_CACHE.get('max', len(pl) or 8))
+                        _, sm, _ = players()
+                        st.update(online=True, degraded=True, name=A2S_CACHE.get('name', CONF['panel_title']), map=(A2S_CACHE.get('map') or sm['map'] or '?'), players=sm['humans'], bots=sm['bots'], max=(A2S_CACHE.get('max') or sm['max'] or 8))
                     except Exception: pass
                 st['sys'] = sysinfo(); st['action'] = ACTION
                 ac = sess_get(self); st['account'] = ({'user': ac['username'], 'role': ac['role']} if ac else None)
@@ -668,7 +676,7 @@ class H(BaseHTTPRequestHandler):
                 st.update(game_flags(st['online'], fe))
                 return self.send_json(st)
             if p == '/api/players':
-                pl, raw = players(); return self.send_json({'players': pl, 'raw': raw})
+                pl, _, raw = players(); return self.send_json({'players': pl, 'raw': raw})
             if p == '/api/whitelist': return self.send_json({'list': read_whitelist()})
             if p == '/api/addons': return self.send_json({'addons': list_addons(), 'jobs': JOBS, 'zips': ZIPS})
             if p == '/api/plugins': return self.send_json(list_plugins())
