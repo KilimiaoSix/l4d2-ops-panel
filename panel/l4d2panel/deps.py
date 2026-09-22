@@ -20,7 +20,7 @@ def session_id(request: Request):
 
 
 def current_account(request: Request, ctx: AppContext = Depends(get_ctx)) -> dict:
-    account = ctx.sessions.account_for(session_id(request))
+    account = ctx.auth.account_for(session_id(request))
     if not account: raise ApiError(401, 'auth')
     return account
 

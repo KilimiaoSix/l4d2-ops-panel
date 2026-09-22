@@ -31,7 +31,6 @@ class AppContext:
     settings: Settings
     paths: Paths
     db: Database
-    sessions: SessionStore
     audit: AuditLog
     auth: AuthService
     status: StatusService
@@ -58,7 +57,7 @@ def build_context(settings: Settings, base_dir: Path) -> AppContext:
     server = ServerControl(lgsm, audit)
     game = GameService(paths, rcon, audit)
     auth = AuthService(settings, account_store, sessions, audit); auth.seed()
-    return AppContext(settings=settings, paths=paths, db=db, sessions=sessions, audit=audit, auth=auth,
+    return AppContext(settings=settings, paths=paths, db=db, audit=audit, auth=auth,
                       status=StatusService(settings, a2s, game, features, monitoring, server), game=game,
                       whitelist=WhitelistService(paths, rcon, steam, game, audit),
                       addons=AddonService(settings, paths, rcon, steam, jobs, downloads, audit),

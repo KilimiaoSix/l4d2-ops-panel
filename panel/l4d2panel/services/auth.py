@@ -79,3 +79,7 @@ class AuthService:
 
     def logout(self, sid: str):
         self.sessions.delete(sid)
+
+    def account_for(self, sid):
+        """The account behind a session cookie value, or None."""
+        return self.sessions.account_for(sid)
