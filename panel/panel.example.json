@@ -21,6 +21,7 @@
   "steam_api_base": "https://api.steampowered.com",
   "workshop_connections": 8,
   "workshop_retries": 8,
+  "steam_api_key": "",
 
   "panel_title": "L4D2 运维面板",
   "display_host": "l4d2.example.com",

@@ -8,7 +8,7 @@ when they are present (Private Whitelist, SI Preset, Points System). Everything 
 import shutil
 import json, os, re, ssl, socket, struct, subprocess, threading, time, secrets, sys, glob, sqlite3, hashlib, hmac, zipfile
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, unquote, quote
+from urllib.parse import urlparse, unquote, quote, parse_qsl
 from contextlib import closing
 
 DIR = os.path.dirname(os.path.abspath(__file__))
@@ -27,6 +27,7 @@ DEFAULTS = {
     'protected_plugins': ['sourcemod', 'basecommands', 'basetriggers', 'basechat', 'admin-flatfile', 'adminmenu',
                           'sm_whitelist', 'sipreset', 'ps_mapreset', 'l4d2_points_system'],
     'steam_api_base': 'https://api.steampowered.com', 'workshop_connections': 8, 'workshop_retries': 8,   # workshop downloads (ranged, parallel)
+    'steam_api_key': '',                                                       # Steam Web API key: enables the workshop search card ('' = hidden)
 }
 CONF = dict(DEFAULTS)
 try:
@@ -208,23 +209,73 @@ def vpk_entries(path):
         pass
     return out
 
-def addon_info(name):
-    path = os.path.join(ADDONS, name)
+VPK_MAGIC = b'\x34\x12\xaa\x55'
+def vpk_summary(path):
+    """What a vpk holds: its campaign maps, its mission file, and a one-line description of the contents for the 'not a map' message."""
     ents = vpk_entries(path)
     maps = sorted(e.split('/')[-1][:-4] for e in ents if e.startswith('maps/') and e.endswith('.bsp'))
-    title = ''
-    for e in ents:
-        if e.startswith('missions/') and e.endswith('.txt'):
-            title = e.split('/')[-1][:-4]; break
-    return {'name': name, 'size_mb': round(os.path.getsize(path) / 1048576, 1), 'maps': maps, 'mission': title, 'protected': name in PROTECTED}
+    mission = next((e.split('/')[-1][:-4] for e in ents if e.startswith('missions/') and e.endswith('.txt')), '')
+    tops = sorted(set(e.split('/')[0] + '/' if '/' in e else e for e in ents))
+    kind = f'{len(ents)} 个文件：' + '、'.join(tops[:5]) + ('…' if len(tops) > 5 else '') if ents else '解析不到任何文件'
+    return {'maps': maps, 'mission': mission, 'kind': kind}
+
+def addon_info(name):
+    path = os.path.join(ADDONS, name); s = vpk_summary(path)
+    return {'name': name, 'size_mb': round(os.path.getsize(path) / 1048576, 1), 'maps': s['maps'], 'mission': s['mission'], 'protected': name in PROTECTED}
 
 def list_addons():
     return [addon_info(n) for n in sorted(os.listdir(ADDONS)) if n.lower().endswith('.vpk')]
 
-def safe_vpk_name(n):
+def safe_vpk_name(n, exts=('.vpk',)):
     n = os.path.basename(n).strip()
     n = re.sub(r'[^\w.\-一-鿿 ]', '_', n)
-    return n if n.lower().endswith('.vpk') and len(n) > 4 else None
+    return n if n.lower().endswith(exts) and len(n) > 4 else None
+
+def install_vpk(src, name):
+    """The one gate every install path goes through (upload, zip, workshop, DepotDownloader): move src to addons/<name>
+    only if it is a VPK that actually contains maps. Anything else (skins, sounds, scripts, junk) is deleted and reported."""
+    try:
+        if name in PROTECTED: raise ValueError(f'{name} 是受保护的文件，不能覆盖')
+        with open(src, 'rb') as f: magic = f.read(4)
+        if magic != VPK_MAGIC: raise ValueError(f'{name} 不是有效的 VPK 文件')
+        s = vpk_summary(src)
+        if not s['maps']: raise ValueError(f'{name} 里没有地图（maps/*.bsp），不是战役文件，已丢弃。内容：{s["kind"]}')
+    except ValueError:
+        os.remove(src); raise
+    final = os.path.join(ADDONS, name)
+    try: os.replace(src, final)
+    except OSError: shutil.move(src, final)
+    return addon_info(name)
+
+def install_zip(path):
+    """Install every campaign vpk inside a zip (what gamemaps.com serves), ignore the rest. Returns {'installed': [addon_info], 'skipped': [{'name', 'reason'}]}."""
+    installed, skipped, seen = [], [], []
+    try:
+        with zipfile.ZipFile(path) as z:
+            for zi in z.infolist():
+                base = os.path.basename(zi.filename)
+                if zi.is_dir() or not base or zi.filename.startswith('__MACOSX/'): continue
+                seen.append(base)
+                if not base.lower().endswith('.vpk'): continue
+                if zi.file_size > int(CONF['max_upload_mb']) * 1048576: skipped.append({'name': base, 'reason': f'超过 {CONF["max_upload_mb"]}MB'}); continue
+                name = safe_vpk_name(base)
+                if not name: continue
+                tmp = os.path.join(ADDONS, name + '.uploading')
+                try:
+                    with z.open(zi) as src, open(tmp, 'wb') as dst: shutil.copyfileobj(src, dst, 1048576)
+                    installed.append(install_vpk(tmp, name))
+                except ValueError as e: skipped.append({'name': base, 'reason': str(e)})
+                except Exception as e:
+                    if os.path.exists(tmp): os.remove(tmp)
+                    skipped.append({'name': base, 'reason': f'解压失败: {e}'})
+    except zipfile.BadZipFile:
+        raise ValueError('不是有效的 zip 文件（rar / 7z 请先解压出 .vpk 再上传）')
+    finally:
+        os.remove(path)
+    if not installed:
+        if skipped: raise ValueError('压缩包里的 vpk 都不能安装：' + '；'.join(s['reason'] for s in skipped))
+        raise ValueError('压缩包里没有 .vpk 文件' + ('（内容：' + '、'.join(seen[:8]) + ('…' if len(seen) > 8 else '') + '）' if seen else '（空压缩包）'))
+    return {'installed': installed, 'skipped': skipped}
 
 def refresh_addons():
     try: return Rcon.run('update_addon_paths') + '\n' + Rcon.run('mission_reload')
@@ -238,7 +289,6 @@ def refresh_addons():
 # continues where it stopped. DepotDownloader is only used for depot-based items (no file_url).
 WS_TMP = os.path.join(DIR, 'workshop_tmp')
 WS_CHUNK = 8 * 1048576
-VPK_MAGIC = b'\x34\x12\xaa\x55'
 def _wslog(pubid, msg):
     try:
         os.makedirs(WS_TMP, exist_ok=True)
@@ -327,12 +377,13 @@ def _depot_job(pubid, job, t0):
     job['msg'] = '通过 DepotDownloader 下载中（这条路径没有进度显示）…'
     with open(os.path.join(WS_TMP, pubid + '.log'), 'a', encoding='utf-8') as lf:
         r = subprocess.run([CONF['depotdownloader'], '-app', '550', '-pubfile', pubid, '-dir', tmp], stdout=lf, stderr=subprocess.STDOUT, text=True, timeout=6 * 3600)
-    found = []
+    found, bad = [], []
     for root, _, files in os.walk(tmp):
         for fn in files:
             if fn.lower().endswith('.vpk'):
-                dst = os.path.join(ADDONS, safe_vpk_name(fn) or f'workshop_{pubid}.vpk'); shutil.move(os.path.join(root, fn), dst); found.append(os.path.basename(dst))
-    if not found: raise RuntimeError(f'DepotDownloader 没有下载到 vpk（退出码 {r.returncode}，详见 workshop_tmp/{pubid}.log）')
+                try: found.append(install_vpk(os.path.join(root, fn), safe_vpk_name(fn) or f'workshop_{pubid}.vpk')['name'])
+                except ValueError as e: bad.append(str(e))
+    if not found: raise RuntimeError('；'.join(bad) or f'DepotDownloader 没有下载到 vpk（退出码 {r.returncode}，详见 workshop_tmp/{pubid}.log）')
     shutil.rmtree(tmp, ignore_errors=True); el = int(time.time() - t0)
     job.update(state='done', files=found, msg=f'已安装: {", ".join(found)}（用时 {el // 60} 分 {el % 60} 秒） ' + refresh_addons())
 
@@ -357,11 +408,8 @@ def workshop_job(pubid):
         _wslog(pubid, f'{job["title"]} -> {job["name"]} {size} 字节 {url}')
         os.makedirs(WS_TMP, exist_ok=True); job['msg'] = f'开始下载 {job["name"]}（{size / 1048576:.1f} MB）'
         download_ranged(pubid, url, size, dest, job)
-        with open(dest, 'rb') as f: magic = f.read(4)
-        if magic != VPK_MAGIC: os.remove(dest); raise RuntimeError(f'下载的文件不是 VPK（{d.get("filename")}）')
-        final = os.path.join(ADDONS, job['name'])
-        try: os.replace(dest, final)
-        except OSError: shutil.move(dest, final)
+        try: install_vpk(dest, job['name'])   # deletes dest when the item is not a campaign
+        except ValueError as e: raise RuntimeError(str(e))
         el = int(time.time() - t0)
         job.update(state='done', files=[job['name']], msg=f'已安装: {job["name"]}（{size / 1048576:.1f} MB，用时 {el // 60} 分 {el % 60} 秒） ' + refresh_addons())
         _wslog(pubid, job['msg'])
@@ -370,6 +418,31 @@ def workshop_job(pubid):
         job.update(state='error', msg=('已取消' if str(e) == '已取消' else f'下载失败: {e}') + ('；已下载的部分已保留，再点一次“下载安装”会接着下' if kept else ''))
         _wslog(pubid, job['msg'])
 
+def steam_query_files(q, page=1, per=20):
+    """Search L4D2 workshop campaigns (IPublishedFileService/QueryFiles, tag 'Campaigns'): text search when q is given,
+    else most-subscribed. Needs a Steam Web API key (free, https://steamcommunity.com/dev/apikey); the key never leaves the server."""
+    import urllib.request, urllib.parse, urllib.error
+    if not CONF['steam_api_key']: raise ValueError('没有配置 steam_api_key（panel.json），无法搜索创意工坊')
+    params = {'key': CONF['steam_api_key'], 'appid': 550, 'creator_appid': 550, 'requiredtags[0]': 'Campaigns', 'page': page, 'numperpage': per,
+              'query_type': 12 if q else 9, 'return_metadata': 1, 'return_tags': 1, 'return_vote_data': 1, 'return_short_description': 1}
+    if q: params['search_text'] = q
+    req = urllib.request.Request(CONF['steam_api_base'].rstrip('/') + '/IPublishedFileService/QueryFiles/v1/?' + urllib.parse.urlencode(params), headers={'User-Agent': 'l4d2panel'})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r: resp = json.loads(r.read().decode('utf-8', 'replace')).get('response') or {}
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403): raise RuntimeError('Steam 拒绝了这个 API Key（检查 panel.json 里的 steam_api_key）')
+        raise RuntimeError(f'Steam Web API 返回 HTTP {e.code}')
+    except ValueError:
+        raise RuntimeError('Steam Web API 返回了无法解析的内容')
+    items = []
+    for d in resp.get('publishedfiledetails') or []:
+        if int(d.get('result', 1)) != 1: continue
+        items.append({'id': str(d.get('publishedfileid', '')), 'title': d.get('title', ''), 'size_mb': round(int(d.get('file_size') or 0) / 1048576, 1),
+                      'subs': int(d.get('subscriptions') or 0), 'updated': int(d.get('time_updated') or 0), 'preview': d.get('preview_url', ''),
+                      'tags': [t.get('tag', '') for t in d.get('tags') or [] if t.get('tag') != 'Campaigns'],
+                      'score': round(float((d.get('vote_data') or {}).get('score') or 0), 2), 'desc': (d.get('short_description') or '')[:200]})
+    return {'items': items, 'total': int(resp.get('total') or 0), 'page': page}
+
 FEAT = {'t': 0, 'v': {}}
 def features(online):
     """Which optional parts are available: detected from installed SourceMod plugins + local tools (cached 120 s)."""
@@ -377,6 +450,7 @@ def features(online):
     if now - FEAT['t'] < 120 and FEAT['v']: return FEAT['v']
     f = {'lgsm': bool(CONF['lgsm_script']) and os.path.exists(CONF['lgsm_script']),
          'workshop': True,   # Web API + ranged HTTP download; DepotDownloader is only a fallback
+         'workshop_search': bool(CONF['steam_api_key']),
          'console_log': bool(CONSOLE_LOG) and os.path.exists(CONSOLE_LOG), 'perf': bool(PERF_CSV) and os.path.exists(PERF_CSV),
          'sourcemod': False, 'whitelist': False, 'preset': False, 'points': False}
     if online:
@@ -671,6 +745,10 @@ class H(BaseHTTPRequestHandler):
                 pl, raw = players(); return self.send_json({'players': pl, 'raw': raw})
             if p == '/api/whitelist': return self.send_json({'list': read_whitelist()})
             if p == '/api/addons': return self.send_json({'addons': list_addons(), 'jobs': JOBS, 'zips': ZIPS})
+            if p == '/api/workshop_search':
+                qs = dict(parse_qsl(urlparse(self.path).query))
+                try: return self.send_json(steam_query_files(qs.get('q', '').strip()[:100], max(1, min(1000, int(qs.get('page') or 1)))))
+                except ValueError as e: return self.send_json({'error': str(e)}, 400)
             if p == '/api/plugins': return self.send_json(list_plugins())
             if p == '/api/me':
                 ac = sess_get(self)
@@ -792,8 +870,8 @@ class H(BaseHTTPRequestHandler):
                 else: return self.send_json({'error': 'bad op'}, 400)
                 return self.send_json({'out': out, 'list': read_whitelist()})
             if p == '/api/upload':
-                qs = urlparse(self.path).query; name = safe_vpk_name(unquote(qs.split('name=', 1)[1])) if 'name=' in qs else None
-                if not name: return self.send_json({'error': '只接受 .vpk 文件'}, 400)
+                qs = urlparse(self.path).query; name = safe_vpk_name(unquote(qs.split('name=', 1)[1]), ('.vpk', '.zip')) if 'name=' in qs else None
+                if not name: return self.send_json({'error': '只接受 .vpk 或 .zip 文件'}, 400)
                 n = int(self.headers.get('Content-Length', 0) or 0)
                 if n <= 0 or n > int(CONF['max_upload_mb']) * 1048576: return self.send_json({'error': f'文件为空或超过 {CONF["max_upload_mb"]}MB'}, 400)
                 tmp = os.path.join(ADDONS, name + '.uploading'); got = 0
@@ -803,10 +881,9 @@ class H(BaseHTTPRequestHandler):
                         if not chunk: break
                         f.write(chunk); got += len(chunk)
                 if got != n: os.remove(tmp); return self.send_json({'error': f'上传中断 ({got}/{n})'}, 400)
-                with open(tmp, 'rb') as f: magic = f.read(4)
-                if magic != b'\x34\x12\xaa\x55': os.remove(tmp); return self.send_json({'error': '不是有效的 VPK 文件'}, 400)
-                os.replace(tmp, os.path.join(ADDONS, name))
-                return self.send_json({'ok': True, 'addon': addon_info(name), 'out': refresh_addons()})
+                try: res = install_zip(tmp) if name.lower().endswith('.zip') else {'installed': [install_vpk(tmp, name)], 'skipped': []}
+                except ValueError as e: return self.send_json({'error': str(e)}, 400)
+                return self.send_json({'ok': True, **res, 'out': refresh_addons()})
             if p == '/api/addons':
                 op = d.get('op'); name = safe_vpk_name(str(d.get('name', '')))
                 if op == 'delete':
@@ -999,7 +1076,7 @@ button.sw{position:relative;width:44px;height:24px;padding:0;background:var(--bd
 button.sw::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .2s}
 button.sw.on{background:var(--ok)}button.sw.on::after{left:23px;background:var(--ok-ink)}button.sw.dis{opacity:.4;cursor:default}
 /* tables, lists, output */
-.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}.thumb{display:block;width:72px;height:40px;object-fit:cover;border-radius:3px;background:var(--inp)}
 th{font-family:var(--fd);font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);text-align:left;padding:6px 8px;border-bottom:1px solid var(--bd2);white-space:nowrap}
 td{padding:9px 8px;border-bottom:1px solid var(--bd);vertical-align:middle}tr:last-child td{border-bottom:0}tr:hover td{background:#221e1a}td.act{white-space:nowrap;text-align:right}
 .wl{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid var(--bd);font-size:13px}.wl:last-child{border:0}.wl>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1096,9 +1173,13 @@ BODY = r"""
 <div class="card"><h2>切换地图</h2><div class="row"><select id="map" style="flex:1;min-width:0"></select><button onclick="changemap()">切换</button></div><div class="hint">官方 14 个战役 + 已安装的自定义战役。切换会丢失当前进度。</div></div>
 <div class="card"><h2>自定义战役<span class="sp"></span><button class="g sm" onclick="loadAddons()">刷新</button></h2>
 <div class="row" data-f="workshop"><span class="lbl">工坊</span><input id="wsid" placeholder="创意工坊 ID 或链接" style="flex:1;min-width:0"><button onclick="workshop()">下载安装</button></div>
-<div class="row"><span class="lbl">上传</span><input type="file" id="vpkfile" accept=".vpk" style="flex:1;min-width:0"><button onclick="upload()">上传</button></div>
+<div class="row"><span class="lbl">上传</span><input type="file" id="vpkfile" accept=".vpk,.zip" style="flex:1;min-width:0"><button onclick="upload()">上传</button></div>
 <div id="upmsg" class="mu"></div><div id="addons" style="margin-top:8px"></div>
-<div class="hint">装完自动热加载，不用重启。玩家客户端也要订阅同一个创意工坊物品，否则进不了自定义战役。</div></div>
+<div class="hint">装完自动热加载，不用重启。玩家客户端也要订阅同一个创意工坊物品，否则进不了自定义战役。上传 zip（例如 gamemaps.com 下载的压缩包）会自动解压出里面的 vpk；不含地图（maps/*.bsp）的 vpk 一律拒收。</div></div>
+<div class="card" data-f="workshop_search"><h2>在创意工坊找战役</h2>
+<div class="row"><input id="wsq" placeholder="战役名或关键字，留空 = 订阅最多的战役" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter')wsSearch()"><button onclick="wsSearch()">搜索</button></div>
+<div id="wsres" style="margin-top:8px"></div>
+<div class="hint">只列出带 Campaigns 标签的物品；点“安装”走上面的工坊下载通道，装前同样检查 vpk 里有没有地图。</div></div>
 </section>
 
 <section class="view" id="v-console">
@@ -1220,8 +1301,15 @@ async function delAccount(id,u){if(!confirm('删除账号 '+u+'？'))return;try{
 async function editAccount(a){const steamid=prompt('绑定 Steam（留空 = 解绑；绑定后写入游戏管理员）\n支持 SteamID / 主页链接 / 17位好友码：',a.steamid||'');if(steamid===null)return;const pw=prompt('设置新密码（留空 = 不改）：','');if(pw===null)return;const body={op:'update',id:a.id,steamid:steamid.trim()};if(pw)body.password=pw;try{await run('/api/accounts',body,'已保存 '+a.username);loadAccounts()}catch(e){}}
 async function wsCancel(id){try{await run('/api/addons',{op:'workshop_cancel',id},'正在取消…');setTimeout(loadAddons,1500)}catch(e){}}
 async function workshop(){const id=document.getElementById('wsid').value.trim();if(!id)return;await run('/api/addons',{op:'workshop',id},'开始下载，完成后自动安装');document.getElementById('wsid').value='';setTimeout(loadAddons,1500)}
-async function upload(){const f=document.getElementById('vpkfile').files[0];if(!f){toast('先选择一个 .vpk 文件',true);return}const m=document.getElementById('upmsg');m.textContent='上传中 '+f.name+' ('+(f.size/1048576).toFixed(1)+' MB)…';
-try{const r=await new Promise((res,rej)=>{const x=new XMLHttpRequest();x.open('POST','/api/upload?name='+encodeURIComponent(f.name));x.upload.onprogress=e=>{if(e.lengthComputable)m.textContent='上传中 '+Math.round(e.loaded/e.total*100)+'% · '+f.name};x.onload=()=>res(JSON.parse(x.responseText));x.onerror=()=>rej(new Error('网络错误'));x.send(f)});if(r.error)throw new Error(r.error);m.textContent='已安装 '+r.addon.name+'（'+r.addon.maps.length+' 张地图）';toast('上传完成');loadAddons()}catch(e){m.textContent='失败: '+e.message;toast(e.message,true)}}
+async function upload(){const f=document.getElementById('vpkfile').files[0];if(!f){toast('先选择一个 .vpk 或 .zip 文件',true);return}const m=document.getElementById('upmsg');m.textContent='上传中 '+f.name+' ('+(f.size/1048576).toFixed(1)+' MB)…';
+try{const r=await new Promise((res,rej)=>{const x=new XMLHttpRequest();x.open('POST','/api/upload?name='+encodeURIComponent(f.name));x.upload.onprogress=e=>{if(e.lengthComputable)m.textContent=e.loaded<e.total?'上传中 '+Math.round(e.loaded/e.total*100)+'% · '+f.name:'已上传，正在检查并安装 '+f.name+'…'};x.onload=()=>res(JSON.parse(x.responseText));x.onerror=()=>rej(new Error('网络错误'));x.send(f)});if(r.error)throw new Error(r.error);
+m.textContent='已安装 '+r.installed.map(a=>a.name+'（'+a.maps.length+' 张地图）').join('、')+(r.skipped.length?'；跳过：'+r.skipped.map(s=>s.reason).join('；'):'');toast('上传完成'+(r.skipped.length?'，有 '+r.skipped.length+' 个文件被拒收':''),!!r.skipped.length);loadAddons()}catch(e){m.textContent='失败: '+e.message;toast(e.message,true)}}
+let wsQ='',wsPage=1,wsTotal=0,wsItems=[];
+function wsRender(){const el=document.getElementById('wsres');if(!wsItems.length){el.innerHTML='<div class="mu">没有找到相关战役</div>';return}
+el.innerHTML='<div class="tw"><table><tr><th></th><th>战役</th><th>大小</th><th>订阅</th><th>更新</th><th></th></tr>'+wsItems.map(i=>`<tr><td>${i.preview?`<img class="thumb" src="${esc(i.preview)}" alt="" loading="lazy" onerror="this.style.display='none'">`:''}</td><td><b>${esc(i.title)}</b><div class="mu">${esc(i.tags.join(' · '))}${i.desc?(i.tags.length?' — ':'')+esc(i.desc):''}</div><code class="mu">${esc(i.id)}</code></td><td class="mu">${i.size_mb} MB</td><td class="mu">${i.subs.toLocaleString()}</td><td class="mu">${i.updated?new Date(i.updated*1000).toLocaleDateString():'—'}</td><td class="act"><button class="sm" onclick="wsInstall('${esc(i.id)}',this)">安装</button></td></tr>`).join('')+'</table></div>'+(wsItems.length<wsTotal?`<div class="row"><button class="g sm" onclick="wsSearch(true)">加载更多</button><span class="mu">已显示 ${wsItems.length} / ${wsTotal}</span></div>`:'')}
+async function wsSearch(more){const el=document.getElementById('wsres');if(more)wsPage++;else{wsQ=document.getElementById('wsq').value.trim();wsPage=1;wsItems=[];el.innerHTML='<div class="mu">搜索中…</div>'}
+try{const d=await api('/api/workshop_search?q='+encodeURIComponent(wsQ)+'&page='+wsPage);wsItems=wsItems.concat(d.items);wsTotal=d.total;wsRender()}catch(e){if(!more)el.innerHTML='<div class="mu">'+esc(e.message)+'</div>';toast(e.message,true)}}
+async function wsInstall(id,btn){btn.disabled=true;btn.textContent='已开始下载';try{await run('/api/addons',{op:'workshop',id},'开始下载，完成后自动安装');setTimeout(loadAddons,1500)}catch(e){btn.disabled=false;btn.textContent='安装'}}
 function boot(){document.getElementById('map').innerHTML=MAPS.map(m=>`<option value="${m[0]}">${m[1]} · ${m[0]}</option>`).join('');let v=location.hash.slice(1);if(!TITLES[v]){v='overview';try{v=localStorage.getItem('l4d2view')||v}catch(e){}}nav(v);status();loadPlayers();loadWl();loadAddons();logs('console');perf();setInterval(status,10000);setInterval(loadPlayers,30000);setInterval(perf,60000)}
 (async()=>{try{await api('/api/status');show(true);boot()}catch(e){try{const s=await (await fetch('/api/setup')).json();if(s.needed){showSetup(s.username);return}}catch(e2){}show(false)}})();
 """
