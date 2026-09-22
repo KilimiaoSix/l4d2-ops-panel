@@ -4,6 +4,8 @@ Left 4 Dead 2 专用服务器的 Web 运维面板。**FastAPI 后端 + Vue 3 前
 
 > A web panel for Left 4 Dead 2 dedicated servers: FastAPI backend, Vue 3 frontend, RCON/A2S based, optional LinuxGSM integration, Chinese UI.
 
+这份 README 面向装面板、用面板的人。想改代码、跑测试、了解结构，看 [docs/development.md](docs/development.md)；开服本身的踩坑在 [docs/l4d2-server-notes.md](docs/l4d2-server-notes.md)。
+
 ## 功能
 
 | 页面 | 内容 |
@@ -22,7 +24,7 @@ Left 4 Dead 2 专用服务器的 Web 运维面板。**FastAPI 后端 + Vue 3 前
 
 ## 要求
 
-- 服务器：Linux + **Python 3.10+**（`python3 -m venv` 可用；Ubuntu 22.04 自带 3.10）。依赖只有 `fastapi` 和 `uvicorn`，装在 `panel/venv/` 里，不碰系统 Python
+- 服务器：Linux + **Python 3.10+**（Ubuntu 22.04 / 24.04 自带 3.10 / 3.12）。Ubuntu 默认没有 venv 模块，先 `sudo apt install python3-venv`；依赖只有 `fastapi` 和 `uvicorn`，装在 `panel/venv/` 里，不碰系统 Python
 - 游戏开启 RCON（`server.cfg` 里有 `rcon_password`）
 - 可选：LinuxGSM（开关服）、本仓库的 SourceMod 插件（预设 / 白名单）、Points System（发分）；DepotDownloader 只在工坊物品没有直链时作回退，绝大多数 L4D2 地图不需要
 - 开发机（改前端时才需要）：Node.js 20+，用来把 `frontend/` 构建成静态文件；服务器上不需要 Node
@@ -34,7 +36,7 @@ Left 4 Dead 2 专用服务器的 Web 运维面板。**FastAPI 后端 + Vue 3 前
 ```bash
 git clone https://github.com/KilimiaoSix/l4d2-ops-panel.git
 cd l4d2-ops-panel/frontend && npm ci && npm run build     # 产物写入 ../panel/l4d2panel/static/
-rsync -a --exclude venv --exclude panel.json --exclude panel.db ../panel/ l4d2server@<服务器>:/home/l4d2server/panel/
+rsync -a --exclude venv --exclude tests --exclude devenv --exclude panel.json --exclude 'panel.db*' ../panel/ l4d2server@<服务器>:/home/l4d2server/panel/
 ```
 
 服务器上（以运行游戏的用户执行）：
@@ -54,7 +56,7 @@ cd /home/l4d2server/panel
 
 更新：开发机 `npm run build` → 同 rsync 一次 → 服务器 `venv/bin/pip install -r requirements.txt`（依赖版本变了才需要）→ `sudo systemctl restart l4d2panel`。`panel.json`、`panel.db`、证书都在 `panel/` 目录里，rsync 时排除即可保留。
 
-回滚：`panel.py` 只是入口，把整个 `panel/` 目录换回上一版再 restart 即可；`panel.db` 的表结构与早期单文件版一致，来回切换都能直接用。
+回滚：`panel.py` 只是入口，把整个 `panel/` 目录换回上一版再 restart 即可；`panel.db` 的表结构与早期单文件版一致，来回切换都能直接用。带备份、冒烟检查的完整发布步骤见 [docs/development.md](docs/development.md#发布到服务器)。
 
 ## 配置 `panel/panel.json`
 
@@ -74,42 +76,6 @@ cd /home/l4d2server/panel
 | `panel_title` / `display_host` | 标题、对外显示的连接地址 |
 | `max_upload_mb` / `protected_addons` | 上传上限、不允许删除的 vpk |
 | `protected_plugins` | 插件页里不允许禁用 / 删除的插件名（不带 `.smx`） |
-
-## 代码结构
-
-```
-panel/                      后端 —— 部署到服务器的目录
-├── panel.py                入口：python3 panel.py [--config panel.json]（或 L4D2PANEL_CONFIG=…）
-├── requirements.txt        fastapi + uvicorn
-├── l4d2panel/
-│   ├── settings.py         panel.json → Settings（键与默认值见上表）+ Paths
-│   ├── context.py          组装 store / integrations / services；不在 import 时做任何事
-│   ├── api/                HTTP 路由：解析请求 → 调一个 service → 返回 JSON；pydantic 校验参数
-│   ├── services/           业务：auth、status、game、whitelist、addons、plugins、accounts、monitoring、server_control；每个写操作都记审计
-│   ├── integrations/       协议与外部程序：rcon、a2s、srcds（status 解析）、steam、workshop（分块续传）、lgsm、vpk、sm_files
-│   ├── store/              SQLite：accounts / sessions / audit
-│   ├── jobs.py             后台任务（工坊下载、打包）与下载令牌
-│   └── static/             前端构建产物（不入库）
-├── tests/                  pytest：parity/ 走真实 HTTP 打假 L4D2（RCON + A2S）、假 Steam；unit/ 进程内
-├── install.sh · nginx.example.conf · panel.example.json
-frontend/                   Vue 3 + TypeScript（Vite）；src/api 是带类型的接口层，src/views 对应九个页面
-sourcemod/ · tools/ · docs/ 插件源码、采样脚本、开服笔记
-```
-
-## 开发
-
-不需要真的游戏服务器，仓库自带一个假的 L4D2（RCON + A2S，带真实抓取的 `status` 输出）：
-
-```bash
-cd panel
-python3 -m pip install -r requirements.txt -r requirements-dev.txt
-python3 -m tests.fakes.devenv          # 建 devenv/（临时 game_dir、panel.json）并常驻假游戏；Ctrl-C 停
-python3 panel.py --config devenv/panel.json      # 另开一个终端；账号 admin / admin，http://127.0.0.1:8080
-```
-
-改前端：`cd frontend && npm ci && npm run dev`，Vite 开发服务器（:5173）把 `/api` 代理到上面的 :8080。`npm run build` 会先跑 `vue-tsc` 类型检查再构建。
-
-测试：`cd panel && python3 -m pytest`。`tests/parity/` 以子进程启动面板、通过 HTTP 逐个接口验证行为（RCON 发了什么命令、改了哪些文件、返回什么状态码），`tests/unit/` 覆盖协议解析、SteamID、VPK、cvar 持久化、任务表等；`PANEL_ENTRY=<路径>` 可以让同一套 parity 套件跑另一个版本的面板。
 
 ## 配套内容
 

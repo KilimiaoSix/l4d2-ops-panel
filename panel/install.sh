@@ -8,6 +8,7 @@ python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' || { 
 ask() { local v; read -r -p "$1 [$2]: " v; echo "${v:-$2}"; }
 echo "== L4D2 Ops Panel 安装 =="
 echo "-- 安装依赖到 venv/ --"
+python3 -c 'import ensurepip' 2>/dev/null || { echo "缺少 venv 模块：先执行 sudo apt install python3-venv（Ubuntu / Debian），再重新运行本脚本"; exit 1; }
 [ -d venv ] || python3 -m venv venv
 venv/bin/pip install --disable-pip-version-check -q ${PIP_INDEX_URL:+-i "$PIP_INDEX_URL"} -r requirements.txt && echo "依赖已安装（venv/）"
 [ -f l4d2panel/static/index.html ] || echo "提示：前端还没构建（l4d2panel/static/ 为空），面板先显示占位页。在开发机的 frontend/ 目录执行 npm run build，再把 panel/ 整个目录同步过来。"
