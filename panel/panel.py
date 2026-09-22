@@ -642,7 +642,10 @@ def persist_cvars(pairs):
 class H(BaseHTTPRequestHandler):
     server_version = 'l4d2panel/1.0'
     def log_message(self, fmt, *a):
-        if '/api/status' not in (a[0] if a else ''): super().log_message(fmt, *a)
+        # (2026-09-22) only filter on a real request line: http.server's own send_error() / timeout logging pass an
+        # HTTPStatus or an exception as args[0], and `in` on those raised TypeError (traceback in the journal)
+        if a and isinstance(a[0], str) and '/api/status' in a[0]: return
+        super().log_message(fmt, *a)
     def send_json(self, obj, code=200):
         b = json.dumps(obj, ensure_ascii=False).encode()
         self.send_response(code); self.send_header('Content-Type', 'application/json; charset=utf-8'); self.send_header('Cache-Control', 'no-store'); self.send_header('Content-Length', len(b)); self.end_headers(); self.wfile.write(b)

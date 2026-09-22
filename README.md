@@ -62,6 +62,7 @@ cd l4d2-ops-panel/panel
 - `sourcemod/scripting/sm_whitelist.sp` — 无密码私人服白名单：`!wl_add` `!wl_addid` `!wl_del` `!wl_list`，管理员自动放行，名单为空 = 对所有人开放，开关状态持久化
 - `tools/perf-sampler.sh` — 有人在线时每 15 秒记录 `stats`（fps / 流量），面板画曲线
 - `tools/check_status_parse.py` — RCON `status` 解析的回归检查（L4D2 玩家行在 userid 和名字之间多一列、bot 行没有延迟字段）：`python3 tools/check_status_parse.py`，退出码 0 即通过
+- `tools/check_log_message.py` — 面板日志过滤的回归检查（http.server 自身的 send_error / 超时日志不再触发 TypeError）：`python3 tools/check_log_message.py`，退出码 0 即通过
 - 难度切换会额外执行 `l4d2_force_difficulty <难度>`，供本地的 Force Difficulty 插件跨换图锁定难度（该插件暂未收录进本仓库）；没装时这条命令的报错被忽略，不影响 `z_difficulty` 的设置
 - `docs/l4d2-server-notes.md` — L4D2 开服踩坑笔记（cfg 不能有非 ASCII、SteamCMD 匿名下载 bug、SourceMod 在 L4D2 上的几个不触发……）
 
