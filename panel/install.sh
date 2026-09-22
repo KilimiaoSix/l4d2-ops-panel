@@ -1,17 +1,23 @@
 #!/bin/bash
-# L4D2 Ops Panel 安装脚本：生成 panel.json、自签名证书、systemd 服务。以运行游戏的那个用户执行（例如 l4d2server）。
+# L4D2 Ops Panel 安装脚本：建 venv 装依赖、生成 panel.json、自签名证书、systemd 服务。以运行游戏的那个用户执行（例如 l4d2server）。
+# 国内主机 pip 慢的话先 export PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple 再运行。
 set -e
 cd "$(dirname "$0")"
 command -v python3 >/dev/null || { echo "需要 python3"; exit 1; }
+python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' || { echo "需要 Python 3.10 或更新（当前 $(python3 --version)）"; exit 1; }
 ask() { local v; read -r -p "$1 [$2]: " v; echo "${v:-$2}"; }
 echo "== L4D2 Ops Panel 安装 =="
+echo "-- 安装依赖到 venv/ --"
+[ -d venv ] || python3 -m venv venv
+venv/bin/pip install --disable-pip-version-check -q ${PIP_INDEX_URL:+-i "$PIP_INDEX_URL"} -r requirements.txt && echo "依赖已安装（venv/）"
+[ -f l4d2panel/static/index.html ] || echo "提示：前端还没构建（l4d2panel/static/ 为空），面板先显示占位页。在开发机的 frontend/ 目录执行 npm run build，再把 panel/ 整个目录同步过来。"
 GAME_DIR=$(ask "游戏目录 (…/left4dead2)" "$HOME/serverfiles/left4dead2")
 LGSM=$(ask "LinuxGSM 实例脚本（没有则留空）" "$HOME/l4d2server")
 RCON_HOST=$(ask "RCON/查询地址（L4D2 不回应 127.0.0.1，填服务器网卡 IP）" "$(hostname -I 2>/dev/null | awk '{print $1}')")
 RCON_PORT=$(ask "RCON 端口" "27015")
 CONSOLE_LOG=$(ask "控制台日志（LinuxGSM 默认；没有则留空）" "$HOME/log/console/l4d2server-console.log")
 PERF=$(ask "性能采样 CSV（tools/perf-sampler.sh 产出；没有则留空）" "$HOME/log/perf-samples.csv")
-DD=$(ask "DepotDownloader 路径（用于创意工坊下载；没有则留空）" "$HOME/tools/depotdownloader/DepotDownloader")
+DD=$(ask "DepotDownloader 路径（创意工坊下载的回退；没有则留空）" "$HOME/tools/depotdownloader/DepotDownloader")
 HOST=$(ask "对外显示的域名或 IP（可空）" "")
 ADMIN_USER=$(ask "面板管理员账号" "admin")
 ADMIN_PASS=$(ask "面板管理员密码（留空 = 第一次打开面板时在网页上设置）" "")
@@ -40,7 +46,7 @@ After=network.target
 [Service]
 User=$(whoami)
 WorkingDirectory=$(pwd)
-ExecStart=/usr/bin/python3 $(pwd)/panel.py
+ExecStart=$(pwd)/venv/bin/python $(pwd)/panel.py
 Restart=always
 RestartSec=3
 
@@ -49,7 +55,7 @@ WantedBy=multi-user.target
 UNITEOF
   sudo systemctl daemon-reload && sudo systemctl enable --now l4d2panel && echo "systemd 服务 l4d2panel 已启动"
 else
-  echo "没有 sudo，跳过 systemd。手动启动：python3 $(pwd)/panel.py"
+  echo "没有 sudo，跳过 systemd。手动启动：$(pwd)/venv/bin/python $(pwd)/panel.py"
 fi
 echo
 echo "==================================================="
