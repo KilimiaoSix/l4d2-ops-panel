@@ -12,6 +12,7 @@
 6. `sv_setmax`（l4dtoolz）最大 31 个槽位：人 + 特感 + Tank ≤ 31。
 7. `stats` 命令的 In/Out 列单位是**字节/秒**，不是 KB/s。
 8. `fps_max` 专用服固定 30，`sv_parallel_packentities` / `sv_parallel_sendsnapshot` 默认已开，不用调。
+9. **L4D2 会对 A2S 查询限速。** 公网服务器被各种扫描器持续查询，单次查询经常落在限速窗口里超时。做监控要重试几次，进程还在时再用 RCON 确认一遍，不要一次超时就判定挂了。
 
 ## SourceMod 在 L4D2 上
 

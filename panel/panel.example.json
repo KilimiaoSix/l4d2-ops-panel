@@ -6,6 +6,8 @@
   "cert": "cert.pem",
   "key": "key.pem",
   "session_days": 7,
+  "db": "panel.db",
+  "bootstrap_user": "admin",
 
   "rcon_host": "10.0.0.4",
   "rcon_port": 27015,
@@ -20,5 +22,7 @@
   "panel_title": "L4D2 运维面板",
   "display_host": "l4d2.example.com",
   "max_upload_mb": 3072,
-  "protected_addons": ["admin_system.vpk"]
+  "protected_addons": ["admin_system.vpk"],
+  "protected_plugins": ["sourcemod", "basecommands", "basetriggers", "basechat", "admin-flatfile", "adminmenu",
+                        "sm_whitelist", "sipreset", "ps_mapreset", "l4d2_points_system"]
 }

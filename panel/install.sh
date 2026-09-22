@@ -52,5 +52,5 @@ fi
 echo
 echo "==================================================="
 if [ "$TLS" = true ]; then echo "地址：https://${HOST:-<服务器IP>}:$PORT/   （记得在云防火墙放行 TCP $PORT）"; else echo "面板监听 127.0.0.1:8080，请配置 nginx 反代（见 nginx.example.conf）"; fi
-echo "密码：$PASS   （保存在 panel.json，改完 systemctl restart l4d2panel）"
+echo "账号：admin   密码：$PASS   （首次启动自动建为 owner 账号；之后改密码、加账号在“账号”页，panel.json 里的 password 只在建库时用一次）"
 echo "==================================================="
