@@ -36,14 +36,14 @@ async function points() {
 </script>
 
 <template>
-  <section class="view on">
+  <section class="view on"><div class="grid">
     <div v-if="session.features?.preset" class="card"><h2>特感强度</h2>
       <div class="row"><span class="seg"><button v-for="p in PRESETS" :key="p" :class="{ on: st?.preset === p }" @click="preset(p)">{{ p }}</button></span></div>
-      <div class="hint">auto = 按存活人数 4→16 只自动缩放；te8/te12/te16 = 固定数量。切换立即生效并保存，换图、重启都保持。</div>
+      <div class="note">auto = 按存活人数 4→16 只自动缩放；te8 / te12 / te16 = 固定数量。切换立即生效并保存，换图、重启都保持。</div>
     </div>
     <div class="card"><h2>难度</h2>
       <div class="row"><span class="seg"><button v-for="(name, l) in DIFFICULTY_NAMES" :key="l" :class="{ on: st?.difficulty === l }" @click="difficulty(String(l))">{{ name }}</button></span></div>
-      <div class="hint">即时生效，并跨换图保持（默认专家，由 Force Difficulty 插件维持）；已刷出的 Tank 血量不变。</div>
+      <div class="note">即时生效，并跨换图保持（默认专家，由 Force Difficulty 插件维持）；已刷出的 Tank 血量不变。</div>
     </div>
     <div class="card"><h2>伤害</h2>
       <div class="row">
@@ -51,7 +51,7 @@ async function points() {
         <label>火焰伤害 <input ref="burnEl" v-model="burn" type="number" min="0" max="1" step="0.05" style="width:86px"></label>
         <button @click="damage">应用</button>
       </div>
-      <div class="hint">0 = 无伤害，1 = 全额。即时生效并写入 server.cfg（重启保持）。四个难度档位统一设为同一值，所以投票换难度后也不变；游戏默认友伤 0.1/0.3/0.5、火焰 0.2/0.2/0.4/1。</div>
+      <div class="note"><p>0 = 无伤害，1 = 全额；即时生效并写入 server.cfg，重启保持。</p><p>四个难度档位统一设为同一值，投票换难度后也不变；游戏默认友伤 0.1 / 0.3 / 0.5，火焰 0.2 / 0.2 / 0.4 / 1。</p></div>
     </div>
     <div v-if="session.features?.points" class="card"><h2>发放积分</h2>
       <div class="row">
@@ -63,7 +63,7 @@ async function points() {
         <input v-if="target === '__custom'" v-model="custom" placeholder="玩家名 / #userid" style="width:140px">
         <input v-model="amount" type="number" style="width:96px"><button @click="points">发放</button>
       </div>
-      <div class="hint">通过 Points System 的 sm_givepoints 发放。</div>
+      <div class="note">通过 Points System 的 <code>sm_givepoints</code> 发放。</div>
     </div>
-  </section>
+  </div></section>
 </template>
