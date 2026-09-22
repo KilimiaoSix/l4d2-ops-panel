@@ -26,6 +26,7 @@ DEFAULTS = {
     'db': 'panel.db', 'bootstrap_user': 'admin',
     'protected_plugins': ['sourcemod', 'basecommands', 'basetriggers', 'basechat', 'admin-flatfile', 'adminmenu',
                           'sm_whitelist', 'sipreset', 'ps_mapreset', 'l4d2_points_system'],
+    'steam_api_base': 'https://api.steampowered.com', 'workshop_connections': 8, 'workshop_retries': 8,   # workshop downloads (ranged, parallel)
 }
 CONF = dict(DEFAULTS)
 try:
@@ -177,7 +178,7 @@ def read_whitelist():
 
 ADDONS = os.path.join(GAME, 'addons')
 PROTECTED = set(CONF['protected_addons'])
-JOBS = {}   # workshop download jobs: id -> {state, msg, files}
+JOBS = {}   # workshop download jobs: id -> {state, msg, files, name, done, total, speed}
 
 def vpk_entries(path):
     """Return list of file paths inside a VPK directory (v1/v2), best effort."""
@@ -230,28 +231,145 @@ def refresh_addons():
     try: return Rcon.run('update_addon_paths') + '\n' + Rcon.run('mission_reload')
     except Exception as e: return f'(热加载失败: {e}，重启服务器后生效)'
 
-def workshop_job(pubid):
-    JOBS[pubid] = {'state': 'running', 'msg': '正在从创意工坊下载…', 'files': []}
-    tmp = os.path.join(DIR, 'workshop_tmp', pubid)
+# ---- Steam Workshop download (2026-09-22): Web API -> file_url -> parallel ranged HTTP, resumable ----
+# L4D2 workshop items are plain UGC files on an Akamai CDN. From a Chinese cloud host one connection gets anywhere
+# between ~1 and 20 Mbps depending on the edge DNS hands out, and DepotDownloader fetched the whole file with ONE GET
+# (no retry, no resume), so 800 MB campaigns kept dying at the old 30-minute cap. This downloads 8 MB ranges over
+# several connections, retries each range on its own and keeps finished ranges on disk, so a failed or cancelled job
+# continues where it stopped. DepotDownloader is only used for depot-based items (no file_url).
+WS_TMP = os.path.join(DIR, 'workshop_tmp')
+WS_CHUNK = 8 * 1048576
+VPK_MAGIC = b'\x34\x12\xaa\x55'
+def _wslog(pubid, msg):
     try:
-        subprocess.run(['rm', '-rf', tmp]); os.makedirs(tmp, exist_ok=True)
-        r = subprocess.run([CONF['depotdownloader'], '-app', '550', '-pubfile', pubid, '-dir', tmp], capture_output=True, text=True, timeout=1800)
-        found = []
-        for root, _, files in os.walk(tmp):
-            for fn in files:
-                if fn.lower().endswith('.vpk'):
-                    dst = os.path.join(ADDONS, safe_vpk_name(fn) or f'workshop_{pubid}.vpk')
-                    os.replace(os.path.join(root, fn), dst); found.append(os.path.basename(dst))
-        if found:
-            JOBS[pubid] = {'state': 'done', 'msg': '已安装: ' + ', '.join(found) + ' ' + refresh_addons(), 'files': found}
-        else:
-            tail_ = '\n'.join(r.stdout.strip().splitlines()[-3:])
-            JOBS[pubid] = {'state': 'error', 'msg': '没有下载到 vpk（ID 错误、物品被删除或需要登录）: ' + tail_, 'files': []}
-    except Exception as e:
-        JOBS[pubid] = {'state': 'error', 'msg': f'下载失败: {e}', 'files': []}
-    finally:
-        subprocess.run(['rm', '-rf', tmp])
+        os.makedirs(WS_TMP, exist_ok=True)
+        with open(os.path.join(WS_TMP, pubid + '.log'), 'a', encoding='utf-8') as f: f.write(time.strftime('%Y-%m-%d %H:%M:%S ') + msg + '\n')
+    except Exception: pass
 
+def steam_pubfile_details(pubid):
+    import urllib.request, urllib.parse
+    req = urllib.request.Request(CONF['steam_api_base'].rstrip('/') + '/ISteamRemoteStorage/GetPublishedFileDetails/v1/',
+                                 data=urllib.parse.urlencode({'itemcount': 1, 'publishedfileids[0]': pubid}).encode(), headers={'User-Agent': 'l4d2panel'})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        lst = json.loads(r.read().decode('utf-8', 'replace'))['response'].get('publishedfiledetails') or []
+    if not lst: raise RuntimeError('Steam 没有返回这个物品')
+    return lst[0]
+
+def _range_get(url, start, end, fd, stop, bump, min_rate=0):
+    """GET one byte range straight into fd at its offset; bump(n) reports bytes as they land. Raises unless the whole range arrived."""
+    import urllib.request
+    req = urllib.request.Request(url, headers={'Range': f'bytes={start}-{end}', 'User-Agent': 'l4d2panel'})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        if r.status != 206: raise RuntimeError(f'HTTP {r.status}（CDN 不支持 Range）')
+        want = end - start + 1; got = 0; t0 = time.time()
+        while got < want:
+            if stop(): raise RuntimeError('已取消')
+            piece = r.read(min(262144, want - got))
+            if not piece: raise RuntimeError(f'连接提前断开（{got}/{want} 字节）')
+            os.pwrite(fd, piece, start + got); got += len(piece); bump(len(piece))
+            el = time.time() - t0
+            if min_rate and el > 15 and got / el < min_rate: raise RuntimeError(f'太慢（{got / el / 1024:.0f} KB/s），换个连接重试')
+
+def download_ranged(pubid, url, size, dest, job):
+    """Parallel ranged download of url into dest, progress in job. Finished ranges are recorded in dest + '.parts.json' so a rerun resumes."""
+    from concurrent.futures import ThreadPoolExecutor
+    state_path = dest + '.parts.json'; n = (size + WS_CHUNK - 1) // WS_CHUNK
+    def csize(i): return min(size, (i + 1) * WS_CHUNK) - i * WS_CHUNK
+    done = set()
+    try:
+        st = json.load(open(state_path))
+        if st.get('url') == url and st.get('size') == size and os.path.getsize(dest) == size: done = set(int(i) for i in st['done'])
+    except Exception: pass
+    if not done:
+        with open(dest, 'wb') as f: f.truncate(size)
+    job.update(total=size, done=sum(csize(i) for i in done), speed=0.0)
+    lock = threading.Lock(); hist = [(time.time(), job['done'])]; meta = {'t': 0.0, 'err': ''}
+    def stop(): return bool(job.get('cancel') or meta['err'])
+    def bump(nb):
+        with lock:
+            job['done'] += nb; now = time.time(); hist.append((now, job['done']))
+            while len(hist) > 2 and now - hist[0][0] > 15: hist.pop(0)
+            if now - meta['t'] >= 0.5:
+                meta['t'] = now; job['speed'] = max(0.0, (job['done'] - hist[0][1]) / max(0.001, now - hist[0][0]))
+                job['msg'] = f"{job['name']} {job['done'] / 1048576:.1f}/{size / 1048576:.1f} MB ({100 * job['done'] // size}%) {job['speed'] / 1048576:.1f} MB/s"
+    fd = os.open(dest, os.O_RDWR)
+    try:
+        def fetch(i):
+            s = i * WS_CHUNK; e = s + csize(i) - 1; last = ''
+            for attempt in range(1, int(CONF['workshop_retries']) + 1):
+                if stop(): return
+                acc = {'n': 0}
+                def bump_acc(nb): acc['n'] += nb; bump(nb)
+                try:
+                    _range_get(url, s, e, fd, stop, bump_acc, min_rate=150 * 1024 if attempt <= 2 else 0)
+                    with lock:
+                        done.add(i); tmp_ = state_path + '.tmp'
+                        with open(tmp_, 'w') as f: json.dump({'url': url, 'size': size, 'done': sorted(done)}, f)
+                        os.replace(tmp_, state_path)
+                    return
+                except Exception as ex:
+                    last = str(ex); bump(-acc['n'])   # this range will be fetched again from its start
+                    if last == '已取消' or stop(): return
+                    _wslog(pubid, f'块 {i + 1}/{n} 第 {attempt} 次失败: {last}')
+                    time.sleep(min(15, 2 * attempt))
+            meta['err'] = meta['err'] or f'块 {i + 1}/{n} 重试 {CONF["workshop_retries"]} 次仍失败（{last}）'
+        with ThreadPoolExecutor(max_workers=max(1, int(CONF['workshop_connections']))) as ex:
+            list(ex.map(fetch, [i for i in range(n) if i not in done]))
+    finally:
+        os.close(fd)
+    if job.get('cancel'): raise RuntimeError('已取消')
+    if meta['err']: raise RuntimeError(meta['err'])
+    if len(done) != n: raise RuntimeError('下载不完整')
+    os.remove(state_path)
+
+def _depot_job(pubid, job, t0):
+    """Fallback for items without a direct file_url: DepotDownloader into workshop_tmp/depot_<id> (kept on failure so it can resume)."""
+    tmp = os.path.join(WS_TMP, 'depot_' + pubid); os.makedirs(tmp, exist_ok=True)
+    job['msg'] = '通过 DepotDownloader 下载中（这条路径没有进度显示）…'
+    with open(os.path.join(WS_TMP, pubid + '.log'), 'a', encoding='utf-8') as lf:
+        r = subprocess.run([CONF['depotdownloader'], '-app', '550', '-pubfile', pubid, '-dir', tmp], stdout=lf, stderr=subprocess.STDOUT, text=True, timeout=6 * 3600)
+    found = []
+    for root, _, files in os.walk(tmp):
+        for fn in files:
+            if fn.lower().endswith('.vpk'):
+                dst = os.path.join(ADDONS, safe_vpk_name(fn) or f'workshop_{pubid}.vpk'); shutil.move(os.path.join(root, fn), dst); found.append(os.path.basename(dst))
+    if not found: raise RuntimeError(f'DepotDownloader 没有下载到 vpk（退出码 {r.returncode}，详见 workshop_tmp/{pubid}.log）')
+    shutil.rmtree(tmp, ignore_errors=True); el = int(time.time() - t0)
+    job.update(state='done', files=found, msg=f'已安装: {", ".join(found)}（用时 {el // 60} 分 {el % 60} 秒） ' + refresh_addons())
+
+def workshop_job(pubid):
+    job = JOBS[pubid] = {'state': 'running', 'msg': '正在查询创意工坊…', 'files': [], 'name': '', 'done': 0, 'total': 0, 'speed': 0.0}
+    t0 = time.time(); _wslog(pubid, '开始'); dest = os.path.join(WS_TMP, pubid + '.part')
+    has_depot = bool(CONF['depotdownloader']) and os.path.exists(CONF['depotdownloader'])
+    try:
+        try: d = steam_pubfile_details(pubid)
+        except Exception as e:
+            _wslog(pubid, f'Steam Web API 失败: {e}')
+            if has_depot: return _depot_job(pubid, job, t0)
+            raise RuntimeError(f'查询 Steam Web API 失败（{e}），且没有 DepotDownloader 可回退')
+        if int(d.get('result', 0)) != 1: raise RuntimeError(f'创意工坊没有这个物品（result={d.get("result")}，可能已删除或设为私有）')
+        if int(d.get('consumer_app_id', 550)) != 550: raise RuntimeError('这不是 Left 4 Dead 2 的创意工坊物品')
+        if int(d.get('file_type', 0)) == 2: raise RuntimeError('这是一个合集，请分别下载里面的每个物品')
+        url = d.get('file_url') or ''; size = int(d.get('file_size') or 0)
+        job['name'] = safe_vpk_name(d.get('filename') or '') or f'workshop_{pubid}.vpk'; job['title'] = d.get('title', '')
+        if not url or not size:
+            if int(d.get('hcontent_file') or 0) and has_depot: return _depot_job(pubid, job, t0)
+            raise RuntimeError('这个物品没有可直接下载的文件' + ('，需要 DepotDownloader 才能下载' if int(d.get('hcontent_file') or 0) else ''))
+        _wslog(pubid, f'{job["title"]} -> {job["name"]} {size} 字节 {url}')
+        os.makedirs(WS_TMP, exist_ok=True); job['msg'] = f'开始下载 {job["name"]}（{size / 1048576:.1f} MB）'
+        download_ranged(pubid, url, size, dest, job)
+        with open(dest, 'rb') as f: magic = f.read(4)
+        if magic != VPK_MAGIC: os.remove(dest); raise RuntimeError(f'下载的文件不是 VPK（{d.get("filename")}）')
+        final = os.path.join(ADDONS, job['name'])
+        try: os.replace(dest, final)
+        except OSError: shutil.move(dest, final)
+        el = int(time.time() - t0)
+        job.update(state='done', files=[job['name']], msg=f'已安装: {job["name"]}（{size / 1048576:.1f} MB，用时 {el // 60} 分 {el % 60} 秒） ' + refresh_addons())
+        _wslog(pubid, job['msg'])
+    except Exception as e:
+        kept = os.path.exists(dest)
+        job.update(state='error', msg=('已取消' if str(e) == '已取消' else f'下载失败: {e}') + ('；已下载的部分已保留，再点一次“下载安装”会接着下' if kept else ''))
+        _wslog(pubid, job['msg'])
 
 FEAT = {'t': 0, 'v': {}}
 def features(online):
@@ -259,7 +377,7 @@ def features(online):
     now = time.time()
     if now - FEAT['t'] < 120 and FEAT['v']: return FEAT['v']
     f = {'lgsm': bool(CONF['lgsm_script']) and os.path.exists(CONF['lgsm_script']),
-         'workshop': bool(CONF['depotdownloader']) and os.path.exists(CONF['depotdownloader']),
+         'workshop': True,   # Web API + ranged HTTP download; DepotDownloader is only a fallback
          'console_log': bool(CONSOLE_LOG) and os.path.exists(CONSOLE_LOG), 'perf': bool(PERF_CSV) and os.path.exists(PERF_CSV),
          'sourcemod': False, 'whitelist': False, 'preset': False, 'points': False}
     if online:
@@ -683,6 +801,10 @@ class H(BaseHTTPRequestHandler):
                     if JOBS.get(pubid, {}).get('state') == 'running': return self.send_json({'error': '已经在下载了'}, 400)
                     threading.Thread(target=workshop_job, args=(pubid,), daemon=True).start()
                     return self.send_json({'ok': True, 'id': pubid})
+                if op == 'workshop_cancel':
+                    j = JOBS.get(str(d.get('id', '')))
+                    if not j or j.get('state') != 'running': return self.send_json({'error': '没有进行中的下载'}, 400)
+                    j['cancel'] = True; return self.send_json({'ok': True})
                 if op == 'zip':
                     names = d.get('names') or ([d.get('name')] if d.get('name') else [])
                     names = [n for n in names if n]
@@ -806,6 +928,7 @@ pre{background:#0d1219;border:1px solid var(--bd);padding:10px;border-radius:8px
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1d2733;border:1px solid var(--bd);padding:10px 16px;border-radius:10px;font-size:13px;box-shadow:0 8px 30px #0008;opacity:0;pointer-events:none;transition:.2s;max-width:90vw}#toast.show{opacity:1}
 #login{max-width:360px;margin:12vh auto;text-align:center}body{padding:0}code{background:var(--sur2);padding:1px 5px;border-radius:4px;font-size:12px}#login input{width:100%;margin:12px 0;font-size:15px;padding:11px}#login button{width:100%;padding:11px;font-size:15px}
 .sw{position:relative;width:46px;height:26px;background:#3a4250;border-radius:999px;cursor:pointer;transition:.2s;flex:none}.sw::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}.sw.on{background:var(--ok)}.sw.on::after{left:23px}.sw.dis{opacity:.4;cursor:default}
+.bar{height:6px;background:#1b2530;border-radius:3px;overflow:hidden;margin:4px 0 6px}.bar i{display:block;height:100%;background:var(--ok);transition:width .5s}
 canvas{width:100%;height:56px;display:block}.wl{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #1b2530;font-size:13px}.wl:last-child{border:0}.wl code{color:var(--mu)}
 </style></head><body>
 <div id="login" class="card"><div style="font-size:40px">🧟</div><h2 style="margin:6px 0">L4D2 Ops Panel</h2><div class="mu">Left 4 Dead 2 服务器运维面板</div><input id="user" placeholder="用户名" autocomplete="username" onkeydown="if(event.key==='Enter')login()"><input id="pw" type="password" placeholder="密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"><button onclick="login()">登录</button><div id="lmsg" class="mu" style="margin-top:8px;color:var(--bad)"></div></div>
@@ -945,7 +1068,7 @@ async function perf(){try{const d=await api('/api/logs?perfjson');spark('c-fps',
 
 function fmtJob(j){return j.state==='running'?'⏳ '+j.msg:j.state==='done'?'✅ '+j.msg:'❌ '+j.msg}
 async function loadAddons(){try{const d=await api('/api/addons');const el=document.getElementById('addons');
-const jobs=Object.entries(d.jobs||{}).map(([id,j])=>`<div class="mu">工坊 ${id}: ${esc(fmtJob(j))}</div>`).join('')+Object.entries(d.zips||{}).map(([t,j])=>`<div class="mu">打包: ${esc(fmtJob(j))}${j.state==='done'?` — <a href="/api/download?token=${t}">下载 ${esc(j.name)}（${j.size_mb} MB）</a>`:''}</div>`).join('');
+const jobs=Object.entries(d.jobs||{}).map(([id,j])=>`<div class="mu">工坊 ${id}: ${esc(fmtJob(j))}${j.state==='running'?` <button class="g sm" onclick="wsCancel('${id}')">取消</button>`:''}${j.state==='running'&&j.total?`<div class="bar"><i style="width:${Math.min(100,Math.round(100*(j.done||0)/j.total))}%"></i></div>`:''}</div>`).join('')+Object.entries(d.zips||{}).map(([t,j])=>`<div class="mu">打包: ${esc(fmtJob(j))}${j.state==='done'?` — <a href="/api/download?token=${t}">下载 ${esc(j.name)}（${j.size_mb} MB）</a>`:''}</div>`).join('');
 el.innerHTML=jobs+(d.addons.length?'<table><tr><th>文件</th><th>地图</th><th>大小</th><th></th></tr>'+d.addons.map(a=>`<tr><td><b>${esc(a.name)}</b>${a.mission?'<div class="mu">'+esc(a.mission)+'</div>':''}</td><td class="mu">${a.maps.length?a.maps.length+' 张：'+esc(a.maps.slice(0,3).join(', '))+(a.maps.length>3?'…':''):'—'}</td><td>${a.size_mb} MB</td><td style="white-space:nowrap;text-align:right">${a.maps.length?`<button class="sm" onclick="gomap('${esc(a.maps[0])}')">切到第一章</button> `:''}<button class="g sm" onclick="zipAddon('${esc(a.name)}')">打包下载</button> ${a.protected?'':`<button class="d sm" onclick="delAddon('${esc(a.name)}')">删除</button>`}</td></tr>`).join('')+'</table>':'<div class="mu">还没有自定义战役</div>');
 const sel=document.getElementById('map');const cur=sel.value;sel.innerHTML=MAPS.map(m=>`<option value="${m[0]}">${m[1]} · ${m[0]}</option>`).join('')+d.addons.filter(a=>a.maps.length).map(a=>`<optgroup label="${esc(a.name)}">`+a.maps.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')+'</optgroup>').join('');if([...sel.options].some(o=>o.value===cur))sel.value=cur;
 if(Object.values(d.jobs||{}).some(j=>j.state==='running')||Object.values(d.zips||{}).some(j=>j.state==='running'))setTimeout(loadAddons,3000)}catch(e){}}
@@ -970,6 +1093,7 @@ async function createAccount(){const u=document.getElementById('na-user').value.
 async function delAccount(id,u){if(!confirm('删除账号 '+u+'？'))return;try{await run('/api/accounts',{op:'delete',id:+id},'已删除 '+u);loadAccounts()}catch(e){}}
 async function editAccount(a){const steamid=prompt('绑定 Steam（留空 = 解绑；绑定后写入游戏管理员）\n支持 SteamID / 主页链接 / 17位好友码：',a.steamid||'');if(steamid===null)return;const pw=prompt('设置新密码（留空 = 不改）：','');if(pw===null)return;const body={op:'update',id:a.id,steamid:steamid.trim()};if(pw)body.password=pw;try{await run('/api/accounts',body,'已保存 '+a.username);loadAccounts()}catch(e){}}
 async function workshop(){const id=document.getElementById('wsid').value.trim();if(!id)return;await run('/api/addons',{op:'workshop',id},'开始下载，完成后自动安装');document.getElementById('wsid').value='';setTimeout(loadAddons,1500)}
+async function wsCancel(id){try{await run('/api/addons',{op:'workshop_cancel',id},'正在取消…');setTimeout(loadAddons,1500)}catch(e){}}
 async function upload(){const f=document.getElementById('vpkfile').files[0];if(!f){toast('先选择一个 .vpk 文件',true);return}const m=document.getElementById('upmsg');m.textContent='上传中 '+f.name+' ('+(f.size/1048576).toFixed(1)+' MB)…';
 try{const r=await new Promise((res,rej)=>{const x=new XMLHttpRequest();x.open('POST','/api/upload?name='+encodeURIComponent(f.name));x.upload.onprogress=e=>{if(e.lengthComputable)m.textContent='上传中 '+Math.round(e.loaded/e.total*100)+'% · '+f.name};x.onload=()=>res(JSON.parse(x.responseText));x.onerror=()=>rej(new Error('网络错误'));x.send(f)});if(r.error)throw new Error(r.error);m.textContent='已安装 '+r.addon.name+'（'+r.addon.maps.length+' 张地图）';toast('上传完成');loadAddons()}catch(e){m.textContent='失败: '+e.message;toast(e.message,true)}}
 function boot(){document.getElementById('map').innerHTML=MAPS.map(m=>`<option value="${m[0]}">${m[1]} · ${m[0]}</option>`).join('');let v='overview';try{v=localStorage.getItem('l4d2view')||v}catch(e){}nav(v);status();loadPlayers();loadWl();loadAddons();logs('console');perf();setInterval(status,10000);setInterval(loadPlayers,30000);setInterval(perf,60000)}

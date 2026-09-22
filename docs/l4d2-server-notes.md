@@ -24,7 +24,7 @@
 ## 下载 / 更新
 
 - **SteamCMD 匿名 `app_update 222860` 报 "Invalid platform"**（2024-11 至今，Valve 给这个 app 的 oslist 只写了 windows）。用 [DepotDownloader](https://github.com/SteamRE/DepotDownloader)：`DepotDownloader -app 222860 -os linux -dir <serverfiles>`。
-- 创意工坊物品也可匿名拉：`DepotDownloader -app 550 -pubfile <id> -dir <dir>`。
+- 创意工坊物品也可匿名拉：`DepotDownloader -app 550 -pubfile <id> -dir <dir>`。但 L4D2 的工坊物品是放在 Akamai CDN 上的单个 UGC 文件，DepotDownloader 对它只发一条 GET，没有重试也没有续传；国内云主机到这个 CDN 的单连接速度在 1 到 20 Mbps 之间摆，取决于 DNS 给的节点，800 MB 的战役经常半小时下不完。更稳的做法是用 `ISteamRemoteStorage/GetPublishedFileDetails` 拿 `file_url`（api.steampowered.com 国内可达），然后多连接 Range 分块下载并保留断点（CDN 支持 Range，但对 HEAD 返回 404，探测要用 GET）。面板从 2026-09-22 起就是这么做的。
 - 国内云主机访问 raw.githubusercontent.com 常常卡死：LinuxGSM 的模块、配置需要在能上 GitHub 的机器下好再传；`update-lgsm` 别在服务器上跑。
 - AlliedMods 论坛在 Cloudflare 后面，脚本抓不到附件；找源码去 GitHub：`dvander/sourcepawn-corpus`（论坛附件镜像）、`fbef0102/L4D1_2-Plugins`、`apples1949/douban-l4d2-plugins-set`、`fantasylidong/anne`、`Target5150/MoYu_Server_Stupid_Plugins`。
 - `actions.ext` 扩展只在论坛发布，依赖它的插件（如新版 l4d_afk_commands）拿不到就装不了。

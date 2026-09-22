@@ -11,7 +11,7 @@ Left 4 Dead 2 专用服务器的轻量 Web 运维面板。**单文件 Python 3�
 | 概览 | 在线/离线、地图、玩家数、当前预设/难度/白名单状态、Server FPS、出流量、系统负载；FPS 与出流量曲线 |
 | 玩家 / 白名单 | 在线玩家（踢出 / 发分 / 加白名单）；白名单开关（带状态、重启保持）与名单增删，SteamID 可填 `STEAM_1:x:y`、`[U:1:x]`、17 位好友码或个人主页链接 |
 | 游戏设置 | 特感强度预设（auto / te8 / te12 / te16）、难度（即时生效并高亮）、友伤 / 火焰伤害系数（写入 server.cfg，重启保持）、发放积分（下拉选在线玩家或 @all） |
-| 地图 / 战役 | 切图（官方 14 战役 + 已安装自定义战役）；按创意工坊 ID 下载安装、上传 vpk、列出 / 切到第一章 / 打包下载 / 删除，装完热加载不用重启 |
+| 地图 / 战役 | 切图（官方 14 战役 + 已安装自定义战役）；按创意工坊 ID 或链接下载安装（直连 Steam CDN，多连接分块、失败重试、断点续传、可取消，带进度条）、上传 vpk、列出 / 切到第一章 / 打包下载 / 删除，装完热加载不用重启 |
 | 插件 | SourceMod 插件列表，启用 / 禁用 / 重载 / 删除，上传 .smx 即时加载；核心插件受保护，不能禁用或删除 |
 | 控制台 | 任意 RCON 命令，命令历史 |
 | 日志 / 性能 | 控制台日志、SourceMod 报错、性能采样 |
@@ -24,7 +24,7 @@ Left 4 Dead 2 专用服务器的轻量 Web 运维面板。**单文件 Python 3�
 
 - Linux + Python 3.8+（服务器自带即可，不装任何库）
 - 游戏开启 RCON（`server.cfg` 里有 `rcon_password`）
-- 可选：LinuxGSM（开关服）、DepotDownloader（工坊下载）、本仓库的 SourceMod 插件（预设 / 白名单）、Points System（发分）
+- 可选：LinuxGSM（开关服）、本仓库的 SourceMod 插件（预设 / 白名单）、Points System（发分）；DepotDownloader 只在工坊物品没有直链时作回退，绝大多数 L4D2 地图不需要
 
 ## 安装
 
@@ -49,7 +49,9 @@ cd l4d2-ops-panel/panel
 | `game_dir` | `…/serverfiles/left4dead2` |
 | `lgsm_script` | LinuxGSM 实例脚本，留空则隐藏开关服按钮 |
 | `console_log` / `perf_csv` | 控制台日志、性能采样文件，不存在则隐藏对应功能 |
-| `depotdownloader` | [DepotDownloader](https://github.com/SteamRE/DepotDownloader) 路径，用于创意工坊下载 |
+| `depotdownloader` | [DepotDownloader](https://github.com/SteamRE/DepotDownloader) 路径，仅作工坊下载的回退（物品没有直链时），可留空 |
+| `workshop_connections` / `workshop_retries` | 工坊下载的并发连接数（默认 8）和每个 8 MB 分块的最大重试次数（默认 8）。下载中断或取消后已完成的分块保留在 `workshop_tmp/`，再点一次会续传 |
+| `steam_api_base` | 查询工坊物品用的 Steam Web API 地址，默认 `https://api.steampowered.com`，需要走镜像 / 代理时改这里 |
 | `panel_title` / `display_host` | 标题、对外显示的连接地址 |
 | `max_upload_mb` / `protected_addons` | 上传上限、不允许删除的 vpk |
 | `protected_plugins` | 插件页里不允许禁用 / 删除的插件名（不带 `.smx`） |
