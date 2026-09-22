@@ -13,13 +13,15 @@ CONSOLE_LOG=$(ask "控制台日志（LinuxGSM 默认；没有则留空）" "$HOM
 PERF=$(ask "性能采样 CSV（tools/perf-sampler.sh 产出；没有则留空）" "$HOME/log/perf-samples.csv")
 DD=$(ask "DepotDownloader 路径（用于创意工坊下载；没有则留空）" "$HOME/tools/depotdownloader/DepotDownloader")
 HOST=$(ask "对外显示的域名或 IP（可空）" "")
+ADMIN_USER=$(ask "面板管理员账号" "admin")
+ADMIN_PASS=$(ask "面板管理员密码（留空 = 自动生成）" "")
 MODE=$(ask "监听方式：1 = 自带 HTTPS（自签名证书） 2 = 仅本机 8080，前面放 nginx" "1")
 if [ "$MODE" = "1" ]; then PORT=$(ask "端口" "8443"); BIND=0.0.0.0; TLS=true; else PORT=8080; BIND=127.0.0.1; TLS=false; fi
-PASS=$(python3 -c 'import secrets;print(secrets.token_urlsafe(12))')
-python3 - "$GAME_DIR" "$LGSM" "$RCON_HOST" "$RCON_PORT" "$CONSOLE_LOG" "$PERF" "$DD" "$HOST" "$PORT" "$BIND" "$TLS" "$PASS" <<'PY'
+PASS=${ADMIN_PASS:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(12))')}
+python3 - "$GAME_DIR" "$LGSM" "$RCON_HOST" "$RCON_PORT" "$CONSOLE_LOG" "$PERF" "$DD" "$HOST" "$PORT" "$BIND" "$TLS" "$PASS" "$ADMIN_USER" <<'PY'
 import json,sys
 a=sys.argv[1:]
-c={"password":a[11],"port":int(a[8]),"bind":a[9],"tls":a[10]=="true","cert":"cert.pem","key":"key.pem","session_days":7,
+c={"password":a[11],"bootstrap_user":a[12],"port":int(a[8]),"bind":a[9],"tls":a[10]=="true","cert":"cert.pem","key":"key.pem","session_days":7,
    "rcon_host":a[2],"rcon_port":int(a[3]),"rcon_password":"","game_dir":a[0],"lgsm_script":a[1],"console_log":a[4],"perf_csv":a[5],
    "depotdownloader":a[6],"panel_title":"L4D2 运维面板","display_host":a[7],"max_upload_mb":3072,"protected_addons":["admin_system.vpk"]}
 json.dump(c,open("panel.json","w"),ensure_ascii=False,indent=2); print("panel.json 已写入")
@@ -52,5 +54,5 @@ fi
 echo
 echo "==================================================="
 if [ "$TLS" = true ]; then echo "地址：https://${HOST:-<服务器IP>}:$PORT/   （记得在云防火墙放行 TCP $PORT）"; else echo "面板监听 127.0.0.1:8080，请配置 nginx 反代（见 nginx.example.conf）"; fi
-echo "账号：admin   密码：$PASS   （首次启动自动建为 owner 账号；之后改密码、加账号在“账号”页，panel.json 里的 password 只在建库时用一次）"
+echo "账号：$ADMIN_USER   密码：$PASS   （首次启动用它建出 owner 账号；之后改密码在“账号”页，panel.json 里的 password 只在建库时用一次）"
 echo "==================================================="

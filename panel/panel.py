@@ -311,15 +311,18 @@ def sess_new(account_id):
     sid = secrets.token_urlsafe(32)
     with DB_LOCK, closing(db()) as c: c.execute('INSERT INTO sessions(sid,account_id,expires) VALUES(?,?,?)', (sid, account_id, int(time.time()) + int(CONF['session_days']) * 86400))
     return sid
+def cookie_sid(h):
+    m = re.search(r'(?:^|;\s*)l4d2panel=([A-Za-z0-9_-]+)', h.headers.get('Cookie', ''))
+    return m.group(1) if m else None
 def sess_get(h):
-    m = re.search(r'(?:^|;\s*)l4d2panel=([A-Za-z0-9_-]+)', h.headers.get('Cookie', ''))
-    if not m: return None
+    sid = cookie_sid(h)
+    if not sid: return None
     with DB_LOCK, closing(db()) as c:
-        return c.execute('SELECT a.* FROM sessions s JOIN accounts a ON a.id=s.account_id WHERE s.sid=? AND s.expires>?', (m.group(1), int(time.time()))).fetchone()
+        return c.execute('SELECT a.* FROM sessions s JOIN accounts a ON a.id=s.account_id WHERE s.sid=? AND s.expires>?', (sid, int(time.time()))).fetchone()
 def sess_del(h):
-    m = re.search(r'(?:^|;\s*)l4d2panel=([A-Za-z0-9_-]+)', h.headers.get('Cookie', ''))
-    if m:
-        with DB_LOCK, closing(db()) as c: c.execute('DELETE FROM sessions WHERE sid=?', (m.group(1),))
+    sid = cookie_sid(h)
+    if sid:
+        with DB_LOCK, closing(db()) as c: c.execute('DELETE FROM sessions WHERE sid=?', (sid,))
 db_init(); FAILS = {}
 def client_ip(h):
     return (h.headers.get('X-Real-IP', '').strip() or h.client_address[0])   # X-Real-IP is set by nginx from $remote_addr
@@ -542,6 +545,10 @@ class H(BaseHTTPRequestHandler):
             if p == '/api/whitelist': return self.send_json({'list': read_whitelist()})
             if p == '/api/addons': return self.send_json({'addons': list_addons(), 'jobs': JOBS, 'zips': ZIPS})
             if p == '/api/plugins': return self.send_json(list_plugins())
+            if p == '/api/me':
+                ac = sess_get(self)
+                if not ac: return self.send_json({'error': 'auth'}, 401)
+                return self.send_json({k: ac[k] for k in ('username', 'role', 'steamid', 'flags', 'created', 'last_login')})
             if p == '/api/accounts':
                 ac = sess_get(self)
                 if not ac or ac['role'] != 'owner': return self.send_json({'error': '需要 owner 权限'}, 403)
@@ -709,6 +716,23 @@ class H(BaseHTTPRequestHandler):
                 try: out = Rcon.run('sm plugins load ' + nm)
                 except Exception as e: out = f'已上传，加载失败（换图或重启后生效）: {e}'
                 return self.send_json({'ok': True, 'out': out, **list_plugins()})
+            if p == '/api/me':
+                ac = sess_get(self); op = d.get('op')
+                if not ac: return self.send_json({'error': 'auth'}, 401)
+                if op == 'password':
+                    new = str(d.get('password', ''))
+                    if not verify_pw(str(d.get('current', '')), ac['pass']): return self.send_json({'error': '当前密码不对'}, 403)
+                    if len(new) < 4: return self.send_json({'error': '新密码至少 4 位'}, 400)
+                    with DB_LOCK, closing(db()) as c:
+                        c.execute('UPDATE accounts SET pass=? WHERE id=?', (hash_pw(new), ac['id']))
+                        c.execute('DELETE FROM sessions WHERE account_id=? AND sid<>?', (ac['id'], cookie_sid(self) or ''))   # other devices must log in again
+                    audit(ac['username'], 'account.password', 'self'); return self.send_json({'ok': True})
+                if op == 'steamid':
+                    try: sid_ = parse_steamid(d.get('steamid', ''))
+                    except ValueError as e: return self.send_json({'error': str(e)}, 400)
+                    with DB_LOCK, closing(db()) as c: c.execute('UPDATE accounts SET steamid=? WHERE id=?', (sid_ or None, ac['id']))
+                    audit(ac['username'], 'account.steamid', sid_ or '(unbound)'); return self.send_json({'ok': True, 'steamid': sid_, 'out': sync_sm_admins()})
+                return self.send_json({'error': 'bad op'}, 400)
             if p == '/api/accounts':
                 ac = sess_get(self)
                 if not ac or ac['role'] != 'owner': return self.send_json({'error': '需要 owner 权限'}, 403)
@@ -796,10 +820,10 @@ canvas{width:100%;height:56px;display:block}.wl{display:flex;justify-content:spa
 <button data-v="console" onclick="nav('console')">⌨️ 控制台</button>
 <button data-v="logs" onclick="nav('logs')">📜 日志 / 性能</button>
 <button data-v="server" onclick="nav('server')">🖥️ 服务器</button>
-<button data-v="accounts" onclick="nav('accounts')" id="nav-accounts" style="display:none">🔐 账号</button>
+<button data-v="accounts" onclick="nav('accounts')">🔐 账号</button>
 </nav><div class="mu" id="sidehost" style="padding:12px 14px;font-size:11px"></div></aside>
 <div id="main">
-<header><h1 id="vtitle">概览</h1><span id="pill" class="pill"><i></i><span>连接中</span></span><span class="sp"></span><span id="who" class="mu" style="margin-right:4px"></span><span id="ts" class="mu"></span><button class="g sm" onclick="logout()">退出</button></header>
+<header><h1 id="vtitle">概览</h1><span id="pill" class="pill"><i></i><span>连接中</span></span><span class="sp"></span><span id="who" class="mu" style="margin-right:4px;cursor:pointer" title="我的账号" onclick="nav('accounts')"></span><span id="ts" class="mu"></span><button class="g sm" onclick="logout()">退出</button></header>
 
 <section class="view" id="v-overview">
 <div class="tiles">
@@ -862,10 +886,14 @@ canvas{width:100%;height:56px;display:block}.wl{display:flex;justify-content:spa
 </section>
 
 <section class="view" id="v-accounts">
-<div class="card"><h2>面板账号<span class="sp"></span><button class="g sm" onclick="loadAccounts()">刷新</button></h2>
+<div class="card"><h2>我的账号<span class="sp"></span><span id="me-info" class="mu"></span></h2>
+<div class="row"><input id="me-cur" type="password" placeholder="当前密码" autocomplete="current-password" style="width:130px"><input id="me-new" type="password" placeholder="新密码" autocomplete="new-password" style="width:130px"><input id="me-new2" type="password" placeholder="再输一次新密码" autocomplete="new-password" style="width:130px"><button onclick="changePw()">修改密码</button></div>
+<div class="row"><input id="me-steam" placeholder="绑定 Steam（留空 = 解绑）：SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:200px"><button onclick="bindSteam()">保存绑定</button></div>
+<div class="mu">改密码后其他设备上的登录会失效；绑定 Steam 后会写入游戏管理员（admins_simple.ini 的面板托管块）并热重载。</div></div>
+<div class="card" data-owner style="display:none"><h2>面板账号<span class="sp"></span><button class="g sm" onclick="loadAccounts()">刷新</button></h2>
 <div class="mu" style="margin-bottom:8px">owner 可管理账号。绑定 SteamID 后，该账号会自动写入游戏管理员（admins_simple.ini 的面板托管块）并热重载，一处管两边。</div>
 <table id="accounts"></table></div>
-<div class="card"><h2>新建账号</h2>
+<div class="card" data-owner style="display:none"><h2>新建账号</h2>
 <div class="row"><input id="na-user" placeholder="用户名" style="width:130px"><input id="na-pw" type="password" placeholder="密码" style="width:130px"><select id="na-role" style="width:90px"><option value="admin">admin</option><option value="owner">owner</option></select></div>
 <div class="row"><input id="na-steam" placeholder="绑定 Steam（可空）：SteamID / 主页链接 / 17位好友码" style="flex:1;min-width:200px"><input id="na-flags" value="99:z" style="width:80px"><button onclick="createAccount()">创建</button></div>
 <div class="mu">绑定 Steam 支持：<code>STEAM_1:1:xxx</code>、<code>[U:1:xxx]</code>、17 位好友码、<code>steamcommunity.com/profiles/…</code> 或 <code>/id/自定义名</code>（自定义名需服务器能连 steamcommunity）。权限位：<code>z</code>=全部管理员权限，前面的数字是免疫等级；留空默认 <code>99:z</code>。</div></div>
@@ -876,7 +904,7 @@ canvas{width:100%;height:56px;display:block}.wl{display:flex;justify-content:spa
 const MAPS=%MAPS%;let curlog='console',hist=[];
 const TITLES={overview:'概览',players:'玩家 / 白名单',game:'游戏设置',maps:'地图 / 战役',plugins:'插件',console:'控制台',logs:'日志 / 性能',server:'服务器',accounts:'账号'};
 let myRole='admin';
-function nav(v){if(v==='accounts'&&myRole!=='owner')v='overview';document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));document.querySelectorAll('#side nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));set('vtitle',TITLES[v]||v);try{localStorage.setItem('l4d2view',v)}catch(e){}if(v==='logs')logs(curlog);if(v==='overview')perf();if(v==='maps')loadAddons();if(v==='plugins')loadPlugins();if(v==='accounts')loadAccounts()}
+function nav(v){document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));document.querySelectorAll('#side nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));set('vtitle',TITLES[v]||v);try{localStorage.setItem('l4d2view',v)}catch(e){}if(v==='logs')logs(curlog);if(v==='overview')perf();if(v==='maps')loadAddons();if(v==='plugins')loadPlugins();if(v==='accounts'){loadMe();if(myRole==='owner')loadAccounts()}}
 
 function toast(t,bad){const e=document.getElementById('toast');e.textContent=t;e.style.borderColor=bad?'var(--bad)':'var(--bd)';e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),2800)}
 async function api(p,o){const r=await fetch(p,o?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}:{});if(r.status===401){show(false);throw new Error('未登录')}const j=await r.json();if(j.error)throw new Error(j.error);return j}
@@ -891,7 +919,7 @@ async function status(){try{const s=await api('/api/status');const sys=s.sys||{}
 set('t-players',s.online?`${s.players} / ${s.max}`:'-');set('t-bots',s.online?`bot ${s.bots}`:'');set('t-map',s.online?s.map:'-');set('t-name',s.online?s.name:'');set('t-preset',s.preset||'-');set('t-diff','难度 '+({easy:'简单',normal:'普通',hard:'高级',impossible:'专家'}[s.difficulty]||'-')+' · 白名单'+(s.whitelist===null?'?':s.whitelist?'开':'关'));set('sysinfo',sys.load?`负载 ${sys.load} ｜ 内存 ${sys.mem_used_mb}/${sys.mem_total_mb} MB ｜ 系统已运行 ${sys.uptime_h} h ｜ 游戏进程 ${s.srcds?'运行中':'未运行'}`:'-');
 document.querySelectorAll('#seg-preset button').forEach(b=>b.classList.toggle('on',b.textContent===s.preset));document.querySelectorAll('#seg-diff button').forEach(b=>b.classList.toggle('on',b.dataset.v===s.difficulty));for(const [id,k] of [['dmg-ff','ff'],['dmg-burn','burn']]){const e=document.getElementById(id);if(e&&document.activeElement!==e&&s[k]!=null)e.value=s[k]}
 set('t-fps',s.perf?s.perf.fps:'-');set('t-out',s.perf?s.perf.out_kb+' KB/s':'-');set('t-load',sys.load?sys.load.split(' ')[0]:'-');set('t-mem',sys.mem_used_mb?`内存 ${sys.mem_used_mb}/${sys.mem_total_mb} MB · 已运行 ${sys.uptime_h} h`:'');
-if(s.whitelist!==undefined){wlOn=s.whitelist;renderSw()}if(s.features){document.querySelectorAll('[data-f]').forEach(e=>e.style.display=s.features[e.dataset.f]?'':'none')}if(s.title){set('brand','🧟 '+s.title);document.title=s.title}if(s.display_host){set('sidehost',s.display_host);set('connhost','connect '+s.display_host);document.getElementById('conninfo').style.display=''}if(s.account){myRole=s.account.role;set('who','👤 '+s.account.user+(s.account.role==='owner'?' · owner':''));document.getElementById('nav-accounts').style.display=(s.account.role==='owner')?'':'none'}set('ts',new Date().toLocaleTimeString());set('actmsg',(s.action.running?'正在执行 '+s.action.running+'… ':'')+(s.action.last||''))}catch(e){}}
+if(s.whitelist!==undefined){wlOn=s.whitelist;renderSw()}if(s.features){document.querySelectorAll('[data-f]').forEach(e=>e.style.display=s.features[e.dataset.f]?'':'none')}if(s.title){set('brand','🧟 '+s.title);document.title=s.title}if(s.display_host){set('sidehost',s.display_host);set('connhost','connect '+s.display_host);document.getElementById('conninfo').style.display=''}if(s.account){const wasOwner=myRole==='owner';myRole=s.account.role;set('who','👤 '+s.account.user+(myRole==='owner'?' · owner':''));document.querySelectorAll('[data-owner]').forEach(e=>e.style.display=myRole==='owner'?'':'none');if(myRole==='owner'&&!wasOwner&&document.getElementById('v-accounts').classList.contains('on'))loadAccounts()}set('ts',new Date().toLocaleTimeString());set('actmsg',(s.action.running?'正在执行 '+s.action.running+'… ':'')+(s.action.last||''))}catch(e){}}
 async function act(n){const names={restart:'重启',start:'启动',stop:'停止',monitor:'巡检'};if(n!=='monitor'&&!confirm('确定'+names[n]+'服务器？'))return;await run('/api/action',{name:n},'已开始'+names[n]);setTimeout(status,2000);setTimeout(status,20000)}
 async function preset(n){await run('/api/preset',{name:n},'特感预设已切换为 '+n);status()}
 async function damage(){const o={};for(const [id,k] of [['dmg-ff','ff'],['dmg-burn','burn']]){const v=document.getElementById(id).value;if(v!=='')o[k]=+v}if(!Object.keys(o).length){toast('请填写至少一项',true);return}const j=await run('/api/damage',o,'伤害已更新'+(o.ff!=null?'：友伤 '+o.ff:'')+(o.burn!=null?'，火焰 '+o.burn:''));if(j&&j.persisted===false)toast('已生效，但 server.cfg 未写入（看控制台输出）',true);status()}
@@ -933,6 +961,9 @@ el.querySelectorAll('button[data-a]').forEach(b=>b.onclick=()=>pluginAct(b.datas
 async function pluginAct(op,file){const names={reload:'重载',disable:'禁用',enable:'启用',delete:'删除'};if((op==='disable'||op==='delete')&&!confirm(names[op]+'插件 '+file+'？'))return;try{const d=await api('/api/plugins',{op,file});toast(short(d.out)||names[op]+'完成');renderPlugins(d)}catch(e){toast(e.message,true)}}
 async function uploadSmx(){const f=document.getElementById('smxfile').files[0];if(!f){toast('先选择一个 .smx 文件',true);return}const m=document.getElementById('smxmsg');m.textContent='上传中 '+f.name+'…';try{const r=await new Promise((res,rej)=>{const x=new XMLHttpRequest();x.open('POST','/api/plugin_upload?name='+encodeURIComponent(f.name));x.onload=()=>res(JSON.parse(x.responseText));x.onerror=()=>rej(new Error('网络错误'));x.send(f)});if(r.error)throw new Error(r.error);m.textContent='';toast('已上传并加载：'+short(r.out));renderPlugins(r)}catch(e){m.textContent='失败: '+e.message}}
 async function loadAccounts(){try{renderAccounts(await api('/api/accounts'))}catch(e){toast(e.message,true)}}
+async function loadMe(){try{const m=await api('/api/me');set('me-info',m.username+' · '+m.role+(m.steamid?' · '+m.steamid:''));document.getElementById('me-steam').value=m.steamid||''}catch(e){}}
+async function changePw(){const cur=document.getElementById('me-cur').value,nw=document.getElementById('me-new').value,nw2=document.getElementById('me-new2').value;if(!cur||!nw){toast('填写当前密码和新密码',true);return}if(nw!==nw2){toast('两次输入的新密码不一致',true);return}try{await run('/api/me',{op:'password',current:cur,password:nw},'密码已修改');for(const id of ['me-cur','me-new','me-new2'])document.getElementById(id).value=''}catch(e){}}
+async function bindSteam(){const v=document.getElementById('me-steam').value.trim();try{await run('/api/me',{op:'steamid',steamid:v},v?'已绑定 Steam':'已解绑');loadMe();if(myRole==='owner')loadAccounts()}catch(e){}}
 function renderAccounts(d){const t=document.getElementById('accounts');t.innerHTML='<tr><th>用户名</th><th>角色</th><th>绑定 SteamID</th><th>权限</th><th>最近登录</th><th></th></tr>'+d.accounts.map(a=>{const last=a.last_login?new Date(a.last_login*1000).toLocaleString():'—';return `<tr><td><b>${esc(a.username)}</b>${a.username===d.me?' <span class="mu">(我)</span>':''}</td><td>${esc(a.role)}</td><td><code class="mu">${esc(a.steamid||'—')}</code></td><td class="mu">${esc(a.flags||'')}</td><td class="mu">${esc(last)}</td><td style="white-space:nowrap;text-align:right"><button class="g sm" data-e="${a.id}">编辑</button> ${a.username===d.me?'':`<button class="d sm" data-x="${a.id}" data-u="${esc(a.username)}">删除</button>`}</td></tr>`}).join('');
 window._accts=d.accounts;t.querySelectorAll('button[data-e]').forEach(b=>b.onclick=()=>editAccount(window._accts.find(a=>a.id==b.dataset.e)));t.querySelectorAll('button[data-x]').forEach(b=>b.onclick=()=>delAccount(b.dataset.x,b.dataset.u));}
 async function createAccount(){const u=document.getElementById('na-user').value.trim(),pw=document.getElementById('na-pw').value,role=document.getElementById('na-role').value,steamid=document.getElementById('na-steam').value.trim(),flags=document.getElementById('na-flags').value.trim();if(!u||!pw){toast('填写用户名和密码',true);return}try{await run('/api/accounts',{op:'create',username:u,password:pw,role,steamid,flags},'已创建账号 '+u);document.getElementById('na-user').value='';document.getElementById('na-pw').value='';document.getElementById('na-steam').value='';loadAccounts()}catch(e){}}
