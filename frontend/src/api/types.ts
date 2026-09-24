@@ -2,6 +2,7 @@
 export interface SysInfo { load?: string; mem_used_mb?: number; mem_total_mb?: number; uptime_h?: number }
 
 export interface Features {
+  server_control?: boolean; docker?: boolean
   lgsm: boolean; workshop: boolean; workshop_search: boolean; console_log: boolean; perf: boolean
   sourcemod: boolean; whitelist: boolean; preset: boolean; points: boolean
 }
@@ -10,6 +11,7 @@ export interface Status {
   online: boolean
   name?: string; map?: string; players?: number; max?: number; bots?: number
   srcds: boolean; degraded?: boolean
+  backend?: 'lgsm' | 'docker'; server_error?: string
   sys: SysInfo
   action: { running: string | null; last: string }
   account: { user: string; role: string } | null
@@ -29,9 +31,28 @@ export interface Job {
   token?: string; size_mb?: number
 }
 
+/** Docker installation is a background job; container creation does not imply RCON readiness. */
+export interface InstallJob extends Job { logs?: string[] }
+export interface InstallDefaults {
+  game_port: number
+  tick: 30 | 60 | 100 | 128
+  vac: boolean
+  mirror_url: string
+}
+export interface InstallOverview {
+  available: boolean
+  reason: string
+  installed: boolean
+  compose_file: string
+  game_dir: string
+  job: InstallJob | null
+  defaults: InstallDefaults
+}
+export type InstallRequest = InstallDefaults
+
 export interface AddonsResponse { addons: Addon[]; jobs: Record<string, Job>; zips: Record<string, Job> }
 
-/** /api/upload: every campaign vpk installed (from a .vpk or the vpks inside a .zip), the rest with the reason it was refused. */
+/** /api/upload: every valid VPK installed (from a .vpk or the vpks inside a .zip), invalid entries with reasons. */
 export interface UploadResult { ok: true; installed: Addon[]; skipped: { name: string; reason: string }[]; out: string }
 
 export interface WorkshopItem {
@@ -40,6 +61,24 @@ export interface WorkshopItem {
 export interface WorkshopSearch { items: WorkshopItem[]; total: number; page: number }
 
 export interface PluginsResponse { enabled: { file: string; protected: boolean }[]; disabled: { file: string }[]; raw: string }
+
+export interface PluginConfigFile { name: string; source: 'header' | 'filename' }
+export interface PluginParameter {
+  name: string; value: string; default: string | null; min: string | null; max: string | null
+  description: string; type: 'number' | 'text'; editable: boolean; reason: string | null
+}
+export interface PluginConfigDocument {
+  plugin: string; file: string; revision: string; encoding: string
+  parameters: PluginParameter[]; warnings: string[]; backups: { id: string; created: number }[]
+}
+export interface PluginRuntimeValue { name: string; value: string | null; error: string | null }
+export interface PluginApplyResult extends PluginRuntimeValue {
+  requested: string; status: 'applied' | 'adjusted' | 'error'
+}
+export type PluginConfigMode = 'save' | 'apply' | 'save_apply'
+export interface PluginConfigResult {
+  saved: boolean; backup_id: string | null; document: PluginConfigDocument; applied: PluginApplyResult[]
+}
 
 export interface Me { username: string; role: string; steamid: string | null; flags: string; created: number; last_login: number | null }
 

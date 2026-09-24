@@ -1,5 +1,5 @@
 """Audit table: who did what. Writing never raises — an audit failure must not fail the action."""
-import time
+import json, time
 
 from .db import Database
 
@@ -10,8 +10,11 @@ class AuditLog:
 
     def add(self, who, action, detail=''):
         try:
+            # Parameter updates are bounded and structured at the service boundary.
+            # Keep their JSON intact; retain the legacy cap for free-form commands.
+            detail = json.dumps(detail, ensure_ascii=False) if isinstance(detail, dict) else str(detail)[:400]
             with self.db.cursor() as c:
-                c.execute('INSERT INTO audit(ts,who,action,detail) VALUES(?,?,?,?)', (int(time.time()), who or '?', action, str(detail)[:400]))
+                c.execute('INSERT INTO audit(ts,who,action,detail) VALUES(?,?,?,?)', (int(time.time()), who or '?', action, detail))
         except Exception:
             pass
 

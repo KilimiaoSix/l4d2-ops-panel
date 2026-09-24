@@ -9,11 +9,11 @@ import json, re, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-# page 1 of a campaign search: a real-looking item, a tiny one, and a result!=1 row the panel must drop
+# page 1 of a workshop search: a campaign, a non-campaign addon, and a result!=1 row the panel must drop
 SEARCH_RESULTS = [
     {'result': 1, 'publishedfileid': '2396847377', 'title': '广州增城 （Zengcheng）Lv8.06', 'file_size': '867196936', 'preview_url': 'https://images.example/zc.jpg',
      'subscriptions': 1553836, 'time_updated': 1782860476, 'tags': [{'tag': 'Campaigns'}, {'tag': 'Single Player'}, {'tag': 'Co-op'}], 'vote_data': {'score': 0.91}, 'short_description': 'A campaign'},
-    {'result': 1, 'publishedfileid': '100100100', 'title': 'Test Campaign', 'file_size': '4096', 'subscriptions': 12, 'tags': [{'tag': 'Campaigns'}]},
+    {'result': 1, 'publishedfileid': '100100100', 'title': 'Test Asset Pack', 'file_size': '4096', 'subscriptions': 12, 'tags': [{'tag': 'Co-op'}]},
     {'result': 9, 'publishedfileid': '9999'},
 ]
 

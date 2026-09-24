@@ -1,10 +1,11 @@
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
 
 from ..context import AppContext
 from ..deps import current_account, get_ctx
+from ..game_modes import GameMode
 
 router = APIRouter()
 
@@ -19,6 +20,10 @@ class PresetIn(BaseModel):
 
 class DifficultyIn(BaseModel):
     level: Literal['easy', 'normal', 'hard', 'impossible']
+
+
+class GameModeIn(BaseModel):
+    mode: GameMode
 
 
 class DamageIn(BaseModel):
@@ -47,6 +52,17 @@ def preset(body: PresetIn, ctx: AppContext = Depends(get_ctx), account: dict = D
 @router.post('/api/difficulty')
 def difficulty(body: DifficultyIn, ctx: AppContext = Depends(get_ctx), account: dict = Depends(current_account)):
     return {'out': ctx.game.set_difficulty(body.level, account['username'])}
+
+
+@router.get('/api/game-mode')
+def game_mode(response: Response, ctx: AppContext = Depends(get_ctx), account: dict = Depends(current_account)):
+    response.headers['Cache-Control'] = 'no-store'
+    return ctx.game.modes.read()
+
+
+@router.post('/api/game-mode')
+def switch_game_mode(body: GameModeIn, ctx: AppContext = Depends(get_ctx), account: dict = Depends(current_account)):
+    return ctx.game.modes.switch(body.mode.value, account['username'])
 
 
 @router.post('/api/damage')

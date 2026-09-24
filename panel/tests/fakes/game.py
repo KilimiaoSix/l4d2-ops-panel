@@ -74,7 +74,7 @@ class FakeGame:
     def __init__(self, password='fakerc0n', whitelist_path=None, a2s_challenge=False, port=0):
         self.password, self.whitelist_path, self.a2s_challenge = password, str(whitelist_path) if whitelist_path else None, a2s_challenge
         self.a2s_on = True; self.commands = []; self.status_text = STATUS_BUSY; self.auth_failures = 0
-        self.state = {'preset': 'te12', 'difficulty': 'Normal', 'cvars': dict(sm_whitelist_enable='1', **DAMAGE_CVARS)}
+        self.state = {'preset': 'te12', 'difficulty': 'Normal', 'cvars': dict(mp_gamemode='coop', sm_whitelist_enable='1', **DAMAGE_CVARS)}
         self._lock = threading.Lock()
         for _ in range(50):   # srcds answers RCON and A2S on the same port number: find one free for both TCP and UDP
             t = socket.socket(); t.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); t.bind(('127.0.0.1', port)); p = t.getsockname()[1]
@@ -139,7 +139,9 @@ class FakeGame:
         if m: return f'[SM] Plugin {m.group(2)} {PLUGIN_VERBS[m.group(1)]} successfully.'
         m = re.fullmatch(r'kickid (\d+) "(.*)"', cmd)
         if m: return f'Kicked userid {m.group(1)} ({m.group(2)})'
-        if cmd.startswith('changelevel '): return ''
+        if cmd.startswith('changelevel '):
+            self.status_text = re.sub(r'(?m)^map\s*:.*$', 'map     : ' + cmd.split()[1], self.status_text)
+            return ''
         if cmd.startswith('sm_givepoints '): return '[SM] 积分已发放'
         if cmd in ('update_addon_paths', 'mission_reload'): return ''
         if cmd.startswith('l4d2_force_difficulty'): return 'Unknown command "l4d2_force_difficulty"'

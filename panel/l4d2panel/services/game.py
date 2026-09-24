@@ -8,6 +8,7 @@ from ..integrations.sm_files import persist_cvars
 from ..integrations.srcds import parse_status
 from ..settings import Paths
 from ..store.audit import AuditLog
+from .game_modes import GameModes
 
 PRESETS = ('auto', 'te8', 'te12', 'te16')
 DIFFICULTIES = ('easy', 'normal', 'hard', 'impossible')
@@ -26,6 +27,7 @@ def quote_arg(s: str) -> str:
 class GameService:
     def __init__(self, paths: Paths, rcon: RconClient, audit: AuditLog, flags_ttl=15):
         self.paths, self.rcon, self.audit, self.flags_ttl = paths, rcon, audit, flags_ttl
+        self.modes = GameModes(rcon, audit, paths.server_cfg)
         # 15 s cache cuts RCON churn and, crucially, keeps last-good values so one flaky RCON call doesn't blank the tiles
         self._flags = {'t': 0, 'preset': '', 'whitelist': None, 'difficulty': '', 'ff': None, 'burn': None}
 

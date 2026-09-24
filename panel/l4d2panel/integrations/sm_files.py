@@ -1,6 +1,9 @@
 """Files of the game / SourceMod install the panel reads and writes: server.cfg, whitelist.txt,
 admins_simple.ini and the plugin directories."""
-import os, re, shutil, time
+import os, re, shutil, threading, time
+
+# All panel read/modify/write paths for server.cfg share this process-wide lock.
+SERVER_CFG_LOCK = threading.RLock()
 
 ADM_BEGIN = '// ==== panel-managed BEGIN (the web panel maintains this block; do not edit inside) ===='
 ADM_END = '// ==== panel-managed END ===='
@@ -8,11 +11,13 @@ ADM_BLOCK_RE = re.compile(r'(?://|;) ==== panel-managed BEGIN.*?(?://|;) ==== pa
 
 
 def read_rcon_password(server_cfg) -> str:
-    try:
-        m = re.search(r'rcon_password\s+"([^"]+)"', open(server_cfg, encoding='utf-8', errors='replace').read())
-        return m.group(1) if m else ''
-    except FileNotFoundError:
-        return ''
+    with SERVER_CFG_LOCK:
+        try:
+            with open(server_cfg, encoding='utf-8', errors='replace') as source:
+                m = re.search(r'rcon_password\s+"([^"]+)"', source.read())
+            return m.group(1) if m else ''
+        except FileNotFoundError:
+            return ''
 
 
 def read_whitelist(path):
@@ -45,15 +50,18 @@ def persist_cvars(server_cfg, pairs):
     """Write name/value pairs into server.cfg so a restart keeps them: replaces an existing line (with or without the
     sm_cvar prefix), otherwise appends. Read/written as latin-1 so the round trip is byte-exact whatever the file
     holds; the lines added are pure ASCII (the engine chokes on multibyte characters). Keeps a timestamped backup."""
-    text = open(server_cfg, encoding='latin-1').read()
-    shutil.copy(server_cfg, str(server_cfg) + '.bak-panel-' + time.strftime('%Y%m%d-%H%M%S'))
-    for name, val in pairs:
-        line = f'sm_cvar {name} {val}'
-        pat = re.compile(r'^[ \t]*(?:sm_cvar[ \t]+)?' + re.escape(name) + r'[ \t]+\S.*$', re.M)
-        text, n = pat.subn(line, text, count=1)
-        if n == 0:
-            text = text.rstrip('\n') + '\n' + line + '\n'
-    open(server_cfg, 'w', encoding='latin-1').write(text)
+    with SERVER_CFG_LOCK:
+        with open(server_cfg, encoding='latin-1') as source:
+            text = source.read()
+        shutil.copy(server_cfg, str(server_cfg) + '.bak-panel-' + time.strftime('%Y%m%d-%H%M%S'))
+        for name, val in pairs:
+            line = f'sm_cvar {name} {val}'
+            pat = re.compile(r'^[ \t]*(?:sm_cvar[ \t]+)?' + re.escape(name) + r'[ \t]+\S.*$', re.M)
+            text, n = pat.subn(line, text, count=1)
+            if n == 0:
+                text = text.rstrip('\n') + '\n' + line + '\n'
+        with open(server_cfg, 'w', encoding='latin-1') as target:
+            target.write(text)
 
 
 def list_smx(directory):

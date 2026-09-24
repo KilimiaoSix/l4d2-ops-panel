@@ -1,4 +1,8 @@
 import glob
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+import threading
+
+from l4d2panel.integrations.game_mode_config import ModeConfig
 
 from l4d2panel.integrations.sm_files import (ADM_BEGIN, ADM_END, list_smx, persist_cvars, read_rcon_password,
                                              read_whitelist, write_admins_block)
@@ -36,3 +40,42 @@ def test_small_readers(tmp_path):
     assert read_rcon_password(cfg) == 's3cret' and read_rcon_password(tmp_path / 'nope') == ''
     (tmp_path / 'b.smx').write_bytes(b'x'); (tmp_path / 'a.smx').write_bytes(b'x'); (tmp_path / 'c.txt').write_bytes(b'x')
     assert list_smx(tmp_path) == ['a.smx', 'b.smx'] and list_smx(tmp_path / 'nope') == []
+
+
+def test_damage_and_mode_concurrent_saves_preserve_both_updates(tmp_path, monkeypatch):
+    from l4d2panel.integrations import sm_files
+
+    cfg = tmp_path / 'server.cfg'
+    cfg.write_bytes(b'sm_cvar mp_gamemode "coop"\nsm_cvar a_factor 0.1\n')
+    damage_read = threading.Event()
+    release_damage = threading.Event()
+    mode_started = threading.Event()
+    original_copy = sm_files.shutil.copy
+
+    def pause_after_read(*args, **kwargs):
+        damage_read.set()
+        assert release_damage.wait(5)
+        return original_copy(*args, **kwargs)
+
+    def save_mode():
+        mode_started.set()
+        return ModeConfig(cfg).save('versus')
+
+    monkeypatch.setattr(sm_files.shutil, 'copy', pause_after_read)
+    with ThreadPoolExecutor(2) as pool:
+        damage = pool.submit(persist_cvars, cfg, [('a_factor', '0.3')])
+        try:
+            assert damage_read.wait(5)
+            mode = pool.submit(save_mode)
+            assert mode_started.wait(5)
+            try:
+                mode.result(timeout=0.2)
+            except TimeoutError:
+                pass
+        finally:
+            release_damage.set()
+        damage.result(timeout=5)
+        mode.result(timeout=5)
+
+    assert ModeConfig(cfg).read() == 'versus'
+    assert b'sm_cvar a_factor 0.3\n' in cfg.read_bytes()
