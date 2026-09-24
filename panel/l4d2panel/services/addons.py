@@ -1,7 +1,7 @@
-"""Custom campaigns (.vpk in <game>/addons): listing, upload (vpk or zip), delete, Steam Workshop search + install, zip packaging.
+"""VPK addons in <game>/addons: listing, upload (vpk or zip), delete, Workshop search + install, and zip packaging.
 
-install_vpk() is the one gate every install path goes through (upload, zip, workshop, DepotDownloader): a vpk without
-maps/*.bsp — skins, sound packs, scripts — never lands in addons/."""
+Every install path still validates the VPK container and protected names, while allowing resource-only VPKs such as
+materials and sound dependencies. The map picker uses the maps parsed from each addon's summary separately."""
 import os, re, secrets, shutil, time, zipfile
 from pathlib import Path
 
@@ -15,7 +15,7 @@ from ..settings import Paths, Settings
 from ..store.audit import AuditLog
 
 INSTALL_NOTE = ('把压缩包里的 .vpk 放到 Left 4 Dead 2\\left4dead2\\addons\\ 目录，重启游戏后在“附加组件”里启用即可。\n'
-                '服务器和所有玩家需要装同一个战役才能一起玩。\n')
+                '战役和它依赖的资源 VPK 都需要由服务器和玩家按作品要求安装。\n')
 PUBID = re.compile(r'(\d{6,12})')
 
 
@@ -26,8 +26,8 @@ def safe_vpk_name(n, exts=('.vpk',)):
     return n if n.lower().endswith(exts) and len(n) > 4 else None
 
 
-class NotACampaign(ValueError):
-    """The file offered for installation is not a campaign vpk (reason in the message); the file has been deleted."""
+class InvalidAddon(ValueError):
+    """The file offered for installation is invalid or cannot replace a protected VPK."""
 
 
 class AddonService:
@@ -53,15 +53,13 @@ class AddonService:
 
     # ---- the install gate ----
     def install_vpk(self, src, name) -> dict:
-        """Move src to addons/<name> if it is a VPK that actually contains maps; anything else is deleted and NotACampaign raised."""
+        """Move a valid VPK to addons/<name>; invalid temporary files are deleted."""
         src = str(src)
         try:
-            if name in self.protected: raise NotACampaign(f'{name} 是受保护的文件，不能覆盖')
+            if name in self.protected: raise InvalidAddon(f'{name} 是受保护的文件，不能覆盖')
             with open(src, 'rb') as f: magic = f.read(4)
-            if magic != VPK_MAGIC: raise NotACampaign(f'{name} 不是有效的 VPK 文件')
-            s = vpk_summary(src)
-            if not s['maps']: raise NotACampaign(f'{name} 里没有地图（maps/*.bsp），不是战役文件，已丢弃。内容：{s["kind"]}')
-        except NotACampaign:
+            if magic != VPK_MAGIC: raise InvalidAddon(f'{name} 不是有效的 VPK 文件')
+        except InvalidAddon:
             os.remove(src); raise
         final = self.paths.addons / name
         try: os.replace(src, final)
@@ -69,7 +67,7 @@ class AddonService:
         return self.info(name)
 
     def install_zip(self, path) -> dict:
-        """Install every campaign vpk inside a zip (what gamemaps.com serves), ignore the rest. -> {'installed': [addon info], 'skipped': [{'name', 'reason'}]}"""
+        """Install every valid VPK inside a zip. -> {'installed': [addon info], 'skipped': [{'name', 'reason'}]}"""
         installed, skipped, seen = [], [], []
         limit = int(self.settings.max_upload_mb) * 1048576
         try:
@@ -86,16 +84,16 @@ class AddonService:
                     try:
                         with z.open(zi) as src, open(tmp, 'wb') as dst: shutil.copyfileobj(src, dst, 1048576)
                         installed.append(self.install_vpk(tmp, name))
-                    except NotACampaign as e: skipped.append({'name': base, 'reason': str(e)})
+                    except InvalidAddon as e: skipped.append({'name': base, 'reason': str(e)})
                     except Exception as e:
                         tmp.unlink(missing_ok=True); skipped.append({'name': base, 'reason': f'解压失败: {e}'})
         except zipfile.BadZipFile:
-            raise NotACampaign('不是有效的 zip 文件（rar / 7z 请先解压出 .vpk 再上传）')
+            raise InvalidAddon('不是有效的 zip 文件（rar / 7z 请先解压出 .vpk 再上传）')
         finally:
             os.remove(path)
         if not installed:
-            if skipped: raise NotACampaign('压缩包里的 vpk 都不能安装：' + '；'.join(s['reason'] for s in skipped))
-            raise NotACampaign('压缩包里没有 .vpk 文件' + ('（内容：' + '、'.join(seen[:8]) + ('…' if len(seen) > 8 else '') + '）' if seen else '（空压缩包）'))
+            if skipped: raise InvalidAddon('压缩包里的 vpk 都不能安装：' + '；'.join(s['reason'] for s in skipped))
+            raise InvalidAddon('压缩包里没有 .vpk 文件' + ('（内容：' + '、'.join(seen[:8]) + ('…' if len(seen) > 8 else '') + '）' if seen else '（空压缩包）'))
         return {'installed': installed, 'skipped': skipped}
 
     # ---- upload ----
@@ -113,7 +111,7 @@ class AddonService:
         if got != expected:
             tmp.unlink(missing_ok=True); raise ApiError(400, f'上传中断 ({got}/{expected})')
         try: res = self.install_zip(tmp) if name.lower().endswith('.zip') else {'installed': [self.install_vpk(tmp, name)], 'skipped': []}
-        except NotACampaign as e: raise ApiError(400, str(e))
+        except InvalidAddon as e: raise ApiError(400, str(e))
         self.audit.add(actor, 'addon.upload', ' '.join(a['name'] for a in res['installed']))
         return {'ok': True, **res, 'out': self.refresh()}
 
@@ -168,8 +166,8 @@ class AddonService:
             self._wslog(pubid, f'{job.title} -> {job.name} {size} 字节 {url}')
             os.makedirs(self.paths.workshop_tmp, exist_ok=True); job.msg = f'开始下载 {job.name}（{size / 1048576:.1f} MB）'
             workshop.download_ranged(url, size, dest, job, self.settings.workshop_connections, self.settings.workshop_retries, lambda m: self._wslog(pubid, m))
-            try: self.install_vpk(dest, job.name)   # deletes dest when the item is not a campaign
-            except NotACampaign as e: raise RuntimeError(str(e))
+            try: self.install_vpk(dest, job.name)
+            except InvalidAddon as e: raise RuntimeError(str(e))
             el = int(time.time() - t0)
             job.files = [job.name]; job.state = 'done'
             job.msg = f'已安装: {job.name}（{size / 1048576:.1f} MB，用时 {el // 60} 分 {el % 60} 秒） ' + self.refresh()
@@ -190,7 +188,7 @@ class AddonService:
             for fn in files:
                 if fn.lower().endswith('.vpk'):
                     try: found.append(self.install_vpk(os.path.join(root, fn), safe_vpk_name(fn) or f'workshop_{pubid}.vpk')['name'])
-                    except NotACampaign as e: bad.append(str(e))
+                    except InvalidAddon as e: bad.append(str(e))
         if not found: raise RuntimeError('；'.join(bad) or f'DepotDownloader 没有下载到 vpk（退出码 {code}，详见 workshop_tmp/{pubid}.log）')
         shutil.rmtree(tmp, ignore_errors=True); el = int(time.time() - t0)
         job.files = found; job.state = 'done'
@@ -199,7 +197,7 @@ class AddonService:
     # ---- zip for download ----
     def start_zip(self, names, actor: str) -> str:
         names = [n for n in (names or []) if n]
-        if not names: raise ApiError(400, '请选择要打包的战役')
+        if not names: raise ApiError(400, '请选择要打包的 VPK')
         token = secrets.token_urlsafe(12)
         self.jobs.start('zip', token, lambda job: self._zip(token, names, job), initial_msg='打包中…')
         self.audit.add(actor, 'addon.zip', ' '.join(names))

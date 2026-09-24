@@ -20,9 +20,9 @@ class SteamClient:
         return lst[0]
 
     def query_files(self, api_key: str, q: str, page: int = 1, per: int = 20) -> dict:
-        """Search L4D2 workshop campaigns (IPublishedFileService/QueryFiles, tag 'Campaigns'): text search when q is given,
-        else most-subscribed. Needs a Steam Web API key (free, https://steamcommunity.com/dev/apikey); the key never leaves the server."""
-        params = {'key': api_key, 'appid': 550, 'creator_appid': 550, 'requiredtags[0]': 'Campaigns', 'page': page, 'numperpage': per,
+        """Search all L4D2 Workshop items: text search when q is given, else most-subscribed.
+        Needs a Steam Web API key (free, https://steamcommunity.com/dev/apikey); the key never leaves the server."""
+        params = {'key': api_key, 'appid': 550, 'creator_appid': 550, 'page': page, 'numperpage': per,
                   'query_type': 12 if q else 9, 'return_metadata': 1, 'return_tags': 1, 'return_vote_data': 1, 'return_short_description': 1}
         if q: params['search_text'] = q
         req = urllib.request.Request(self.api_base + '/IPublishedFileService/QueryFiles/v1/?' + urllib.parse.urlencode(params), headers={'User-Agent': self.ua})

@@ -52,7 +52,7 @@ export type InstallRequest = InstallDefaults
 
 export interface AddonsResponse { addons: Addon[]; jobs: Record<string, Job>; zips: Record<string, Job> }
 
-/** /api/upload: every campaign vpk installed (from a .vpk or the vpks inside a .zip), the rest with the reason it was refused. */
+/** /api/upload: every valid VPK installed (from a .vpk or the vpks inside a .zip), invalid entries with reasons. */
 export interface UploadResult { ok: true; installed: Addon[]; skipped: { name: string; reason: string }[]; out: string }
 
 export interface WorkshopItem {
