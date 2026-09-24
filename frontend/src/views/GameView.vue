@@ -43,9 +43,9 @@ async function points() {
     </div>
     <div class="card"><h2>难度</h2>
       <div class="row"><span class="seg"><button v-for="(name, l) in DIFFICULTY_NAMES" :key="l" :class="{ on: st?.difficulty === l }" @click="difficulty(String(l))">{{ name }}</button></span></div>
-      <div class="note">即时生效，并跨换图保持（默认专家，由 Force Difficulty 插件维持）；已刷出的 Tank 血量不变。</div>
+      <div class="note">即时生效；跨换图锁定难度需 Force Difficulty 插件。已刷出的 Tank 血量不变。</div>
     </div>
-    <div class="card"><h2>伤害</h2>
+    <div v-if="session.features?.sourcemod" class="card"><h2>伤害</h2>
       <div class="row">
         <label>友伤 <input ref="ffEl" v-model="ff" type="number" min="0" max="1" step="0.05" style="width:86px"></label>
         <label>火焰伤害 <input ref="burnEl" v-model="burn" type="number" min="0" max="1" step="0.05" style="width:86px"></label>

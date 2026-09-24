@@ -28,6 +28,9 @@
   "display_host": "l4d2.example.com",
   "max_upload_mb": 3072,
   "protected_addons": ["admin_system.vpk"],
+  "server_backend": "lgsm",
+  "docker_project": "l4d2-panel",
+  "install_dir": "docker",
   "protected_plugins": ["sourcemod", "basecommands", "basetriggers", "basechat", "admin-flatfile", "adminmenu",
                         "sm_whitelist", "sipreset", "ps_mapreset", "l4d2_points_system"]
 }

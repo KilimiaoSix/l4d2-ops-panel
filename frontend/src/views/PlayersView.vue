@@ -48,8 +48,8 @@ async function kickPlayer(p: Player) {
         <tr v-for="p in session.players" :key="p.userid">
           <td><b>{{ p.name }}</b><div><code class="mu">{{ p.steamid }}</code></div></td><td class="mu">{{ p.time }}</td><td class="mu">{{ p.ping }} ms</td>
           <td class="act">
-            <button class="g sm" @click="give(p)">发分</button>
-            <button class="g sm" @click="add(p.steamid, p.name)">加白</button>
+            <button v-if="session.features?.points" class="g sm" @click="give(p)">发分</button>
+            <button v-if="session.features?.whitelist" class="g sm" @click="add(p.steamid, p.name)">加白</button>
             <button class="d sm" @click="kickPlayer(p)">踢</button>
           </td>
         </tr>

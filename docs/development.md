@@ -7,7 +7,7 @@
 ```
 浏览器（Vue SPA） ──HTTPS──▶ nginx（可选） ──▶ panel.py / uvicorn（FastAPI）
                                                  ├─ RCON TCP / A2S UDP ──▶ srcds
-                                                 ├─ subprocess ──▶ LinuxGSM、pgrep
+                                                 ├─ subprocess ──▶ LinuxGSM / pgrep、Docker Compose
                                                  ├─ 文件系统：addons/、sourcemod/plugins/、server.cfg、admins_simple.ini、whitelist.txt、日志、perf CSV
                                                  ├─ HTTPS ──▶ Steam Web API / Steam CDN（工坊）、steamcommunity（解析自定义主页名）
                                                  └─ SQLite panel.db（账号 / 会话 / 审计）
@@ -27,8 +27,8 @@ panel/                      后端 —— 部署到服务器的就是这个目�
 │   ├── deps.py             FastAPI 依赖：当前账号（401）、owner（403）、客户端 IP（X-Real-IP）、会话 cookie
 │   ├── errors.py           ApiError / IntegrationError → {"error": msg}
 │   ├── api/                接口层：解析请求（pydantic 模型）→ 调一个 service → 返回 dict
-│   ├── services/           业务层：auth、status、game、whitelist、addons、plugins、accounts、monitoring、server_control、features
-│   ├── integrations/       协议与外部程序：rcon、a2s、srcds（status 解析）、steam、steamid、workshop（分块续传）、lgsm、vpk、sm_files、system
+│   ├── services/           业务层：auth、status、game、whitelist、addons、plugins、accounts、monitoring、server_control、game_install、features
+│   ├── integrations/       协议与外部程序：rcon、a2s、srcds（status 解析）、steam、steamid、workshop（分块续传）、lgsm、docker、game_installer、vpk、sm_files、system
 │   ├── store/              SQLite：db（连接 + schema）、accounts、sessions、audit
 │   ├── jobs.py             后台任务表（工坊下载、打包）+ 一次性下载令牌
 │   ├── placeholder.html    前端没构建时 GET / 显示的占位页
@@ -70,6 +70,24 @@ npm run build      # 先 vue-tsc 类型检查，再输出到 ../panel/l4d2panel/
 
 前端规矩：所有来自后端的数据只经模板插值渲染，**不用 `v-html`**，事件一律 `@click` 绑模型数据（旧版把玩家名拼进 `onclick` 字符串出过存储型 XSS）。响应类型改了先改 `src/api/types.ts`，类型检查会把用到的地方都揪出来。
 
+### Docker 安装与运行时
+
+`GET /api/install` 返回 Docker CLI / Compose / daemon 检测、不可用原因、安装目录、默认值与任务快照。`POST /api/install` 接受 `game_port`、`tick`（30/60/100/128）、`vac`、`mirror_url`（空串为 Docker Hub），不接受第二个面板的密码、端口或任意镜像/命令。`POST /api/install/cancel` 请求取消并审计；进程无输出时也会检查取消。失败保留日志和可恢复数据，安装成功不代表游戏已在线。
+
+`integrations/game_installer.py` 负责镜像拉取、临时容器复制、staging 校验、Compose 启动与非敏感 `installed.json`。拒绝非本任务的目录、Compose 文件与同名项目；随机 RCON 密码仅在游戏配置中，文件权限为 0600。生成的 Compose 是 JSON（Compose 支持的 YAML 子集），只有游戏服务，使用运行面板的 UID/GID、共享 `game_dir`、只读配置的启动脚本，避免上游每次启动覆盖配置。该镜像的 32 位 srcds 沿用上游 `seccomp:unconfined` 设置。
+
+`context.py` 在成功安装时更新所有共用的 RCON/A2S 连接，清缓存；面板启动时按安装标记和元数据恢复。`services/server_control.py` 按 `settings.server_backend` 选择 LinuxGSM / Docker，两种运行时和安装共用操作锁。`integrations/docker.py` 通过 Compose 标签、安装目录验证目标，所有操作仅针对 `l4d2`，巡检不写入。Docker 状态不再读宿主 `pgrep`，日志接入 `docker logs`；`Monitoring` 请求触发 RCON 性能采样（15 秒、120 条内存环形记录）。旧 LinuxGSM 响应字段保持兼容，Docker 状态额外带 `backend: docker` 与 `features.server_control/docker`。
+
+本地 Docker 联调（需要本机 Docker）：
+
+```bash
+cd panel
+python3 -m tests.docker_smoke          # 真实 Docker + HTTP + RCON/A2S 协议夹具，自动清理自己的项目
+python3 -m tests.docker_smoke --keep   # 同样验证，完成后保留本地面板供浏览器调试；Ctrl-C 清理
+```
+
+该验证构建轻量 Python 镜像模拟游戏协议，不代表真实 L4D2 引擎或插件的游玩验收。单元/接口回归覆盖取消、失败重试、归属冲突、模式配置保留、日志、性能、安装激活、权限和重启恢复。真实游戏引擎需在支持 Linux x86 的环境另外核对。
+
 ## 测试
 
 ```bash
@@ -91,7 +109,7 @@ cd panel && python3 -m pytest          # 约 90 秒
 2. 同步到服务器的临时目录（不直接覆盖，先备份）：
    ```bash
    rsync -az --delete --exclude venv --exclude devenv --exclude tests --exclude requirements-dev.txt --exclude pyproject.toml \
-     --exclude panel.json --exclude 'panel.db*' --exclude '*.pem' --exclude downloads --exclude workshop_tmp \
+     --exclude panel.json --exclude 'panel.db*' --exclude '*.pem' --exclude downloads --exclude workshop_tmp --exclude docker/ \
      --exclude __pycache__ --exclude .pytest_cache panel/ <user>@<服务器>:/tmp/panel-deploy/
    ```
 3. 服务器上（有 sudo 的账号）：

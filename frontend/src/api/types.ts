@@ -2,6 +2,7 @@
 export interface SysInfo { load?: string; mem_used_mb?: number; mem_total_mb?: number; uptime_h?: number }
 
 export interface Features {
+  server_control?: boolean; docker?: boolean
   lgsm: boolean; workshop: boolean; workshop_search: boolean; console_log: boolean; perf: boolean
   sourcemod: boolean; whitelist: boolean; preset: boolean; points: boolean
 }
@@ -10,6 +11,7 @@ export interface Status {
   online: boolean
   name?: string; map?: string; players?: number; max?: number; bots?: number
   srcds: boolean; degraded?: boolean
+  backend?: 'lgsm' | 'docker'; server_error?: string
   sys: SysInfo
   action: { running: string | null; last: string }
   account: { user: string; role: string } | null
@@ -28,6 +30,25 @@ export interface Job {
   files?: string[]; name?: string; title?: string; done?: number; total?: number; speed?: number; cancel?: boolean
   token?: string; size_mb?: number
 }
+
+/** Docker installation is a background job; container creation does not imply RCON readiness. */
+export interface InstallJob extends Job { logs?: string[] }
+export interface InstallDefaults {
+  game_port: number
+  tick: 30 | 60 | 100 | 128
+  vac: boolean
+  mirror_url: string
+}
+export interface InstallOverview {
+  available: boolean
+  reason: string
+  installed: boolean
+  compose_file: string
+  game_dir: string
+  job: InstallJob | null
+  defaults: InstallDefaults
+}
+export type InstallRequest = InstallDefaults
 
 export interface AddonsResponse { addons: Addon[]; jobs: Record<string, Job>; zips: Record<string, Job> }
 

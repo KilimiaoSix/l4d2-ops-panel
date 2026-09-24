@@ -14,7 +14,15 @@ class StatusService:
         self.settings, self.a2s, self.game, self.features, self.monitoring, self.server, self.process_check = settings, a2s, game, features, monitoring, server, process_check
 
     def build(self, account: dict) -> dict:
-        st = self.a2s.query(); st['srcds'] = self.process_check()
+        st = self.a2s.query()
+        if self.settings.server_backend == 'docker':
+            st['backend'] = 'docker'
+            try: st['srcds'] = self.server.running()
+            except Exception as exc:
+                st['srcds'] = False
+                st['server_error'] = str(exc)
+        else:
+            st['srcds'] = self.process_check()
         if not st['online'] and st['srcds']:   # (2026-09-19) A2S throttled but the process is up: confirm via RCON instead of reporting "not responding"
             try:
                 _, sm, _ = self.game.players(); cache = self.a2s.cache

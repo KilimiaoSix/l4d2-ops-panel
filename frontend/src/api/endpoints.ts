@@ -1,5 +1,5 @@
 import { api, upload } from './client'
-import type { Account, AddonsResponse, Me, Out, PerfRow, Player, PluginsResponse, Status, UploadResult, WorkshopSearch } from './types'
+import type { Account, AddonsResponse, InstallOverview, InstallRequest, Me, Out, PerfRow, Player, PluginsResponse, Status, UploadResult, WorkshopSearch } from './types'
 
 export const getSetup = () => api<{ needed: boolean; username: string }>('/api/setup')
 export const postSetup = (password: string) => api<{ ok: true }>('/api/setup', { password })
@@ -20,6 +20,10 @@ export const setDifficulty = (level: string) => api<Out>('/api/difficulty', { le
 export const setDamage = (o: { ff?: number; burn?: number }) => api<Out & { persisted: boolean }>('/api/damage', o)
 export const changeMap = (map: string) => api<Out>('/api/map', { map })
 export const serverAction = (name: string) => api<{ ok: boolean; running: string | null }>('/api/action', { name })
+
+export const getInstall = () => api<InstallOverview>('/api/install')
+export const startInstall = (o: InstallRequest) => api<{ ok: true; id: string }>('/api/install', o)
+export const cancelInstall = () => api<{ ok: true }>('/api/install/cancel', {})
 
 export const getAddons = () => api<AddonsResponse>('/api/addons')
 export const deleteAddon = (name: string) => api<{ ok: true; out: string; addons: AddonsResponse['addons'] }>('/api/addons', { op: 'delete', name })

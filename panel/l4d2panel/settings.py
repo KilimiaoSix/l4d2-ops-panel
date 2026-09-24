@@ -4,9 +4,9 @@ panel.py lives in, as before."""
 import json, os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 DEFAULT_PROTECTED_PLUGINS = ['sourcemod', 'basecommands', 'basetriggers', 'basechat', 'admin-flatfile', 'adminmenu',
                              'sm_whitelist', 'sipreset', 'ps_mapreset', 'l4d2_points_system']
@@ -42,6 +42,9 @@ class Settings(BaseModel):
     max_upload_mb: int = 3072
     protected_addons: List[str] = ['admin_system.vpk']
     protected_plugins: List[str] = DEFAULT_PROTECTED_PLUGINS
+    server_backend: Literal['lgsm', 'docker'] = 'lgsm'
+    docker_project: str = Field(default='l4d2-panel', pattern=r'^[a-z0-9][a-z0-9_-]{0,62}$')
+    install_dir: str = 'docker'
 
 
 @dataclass(frozen=True)
@@ -61,15 +64,17 @@ class Paths:
     key: Path
     downloads: Path
     workshop_tmp: Path
+    install_dir: Path
 
     @classmethod
     def from_settings(cls, s: Settings, base: Path) -> 'Paths':
         def rel(p): return Path(p) if os.path.isabs(p) else base / p
-        game = Path(s.game_dir); sm = game / 'addons' / 'sourcemod'
+        game = rel(s.game_dir).resolve(); sm = game / 'addons' / 'sourcemod'
+        install_dir = rel(s.install_dir)
         return cls(base=base, game=game, server_cfg=game / 'cfg' / 'server.cfg', addons=game / 'addons',
                    sm_plugins=sm / 'plugins', sm_disabled=sm / 'plugins' / 'disabled', sm_logs=sm / 'logs',
                    whitelist=sm / 'configs' / 'whitelist.txt', admins_ini=sm / 'configs' / 'admins_simple.ini',
-                   db=rel(s.db), cert=rel(s.cert), key=rel(s.key), downloads=base / 'downloads', workshop_tmp=base / 'workshop_tmp')
+                   db=rel(s.db), cert=rel(s.cert), key=rel(s.key), downloads=base / 'downloads', workshop_tmp=base / 'workshop_tmp', install_dir=install_dir)
 
 
 def load_settings(path) -> Settings:

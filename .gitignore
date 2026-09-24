@@ -14,3 +14,4 @@ panel/l4d2panel/static/
 frontend/node_modules/
 frontend/dist/
 panel/devenv/
+panel/docker/
