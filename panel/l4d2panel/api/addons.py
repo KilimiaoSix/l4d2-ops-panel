@@ -44,7 +44,7 @@ async def stream_to_file(request: Request, path) -> int:
 
 @router.post('/api/upload')
 async def upload(request: Request, name: str = '', ctx: AppContext = Depends(get_ctx), account: dict = Depends(current_account)):
-    """Campaign upload: the raw .vpk body, name in the query string (multi-GB files are streamed to disk)."""
+    """VPK upload: the raw .vpk body, name in the query string (multi-GB files are streamed to disk)."""
     safe, tmp = ctx.addons.upload_target(name)
     n = int(request.headers.get('content-length', 0) or 0); ctx.addons.check_upload_size(n)
     got = await stream_to_file(request, tmp)
@@ -53,7 +53,7 @@ async def upload(request: Request, name: str = '', ctx: AppContext = Depends(get
 
 @router.get('/api/workshop_search')
 def workshop_search(q: str = '', page: int = 1, ctx: AppContext = Depends(get_ctx), account: dict = Depends(current_account)):
-    """Search the Workshop for campaigns (needs steam_api_key); ?q= text, empty = most subscribed; ?page= for more."""
+    """Search L4D2 Workshop items (needs steam_api_key); ?q= text, empty = most subscribed; ?page= for more."""
     return ctx.addons.search(q, page)
 
 

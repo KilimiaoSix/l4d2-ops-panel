@@ -9,8 +9,9 @@ import { session } from '../stores/session'
 
 const data = ref<AddonsResponse>({ addons: [], jobs: {}, zips: {} })
 const map = ref(CAMPAIGNS[0]![0]), wsId = ref(''), upMsg = ref(''), fileEl = ref<HTMLInputElement>()
-const tab = ref<'ws' | 'up' | 'search'>('ws')   // 安装新战役: which install method is showing
-const customCampaigns = computed(() => data.value.addons.filter(a => a.maps.length))
+const tab = ref<'ws' | 'up' | 'search'>('ws')   // 安装 VPK: which install method is showing
+// Resource-only VPKs stay visible in the addon list but cannot be map targets.
+const mapAddons = computed(() => data.value.addons.filter(a => a.maps.length))
 let timer: ReturnType<typeof setTimeout> | undefined, alive = true
 
 async function load() {
@@ -62,7 +63,7 @@ async function uploadFile() {
   } catch (e) { upMsg.value = '失败: ' + (e as Error).message; toast((e as Error).message, true) }
 }
 
-// ---- Workshop search: campaigns only, paged; "安装" hands the id to the download job above ----
+// ---- Workshop search, paged; "安装" hands the id to the download job above ----
 const wsQuery = ref(''), wsItems = ref<WorkshopItem[]>([]), wsTotal = ref(0), wsPage = ref(1), wsMsg = ref(''), wsStarted = ref(new Set<string>())
 let wsTerm = ''
 async function search(more = false) {
@@ -70,7 +71,7 @@ async function search(more = false) {
   else { wsTerm = wsQuery.value.trim(); wsPage.value = 1; wsItems.value = []; wsMsg.value = '搜索中…' }
   try {
     const d = await workshopSearch(wsTerm, wsPage.value)
-    wsItems.value = wsItems.value.concat(d.items); wsTotal.value = d.total; wsMsg.value = wsItems.value.length ? '' : '没有找到相关战役'
+    wsItems.value = wsItems.value.concat(d.items); wsTotal.value = d.total; wsMsg.value = wsItems.value.length ? '' : '没有找到相关工坊内容'
   } catch (e) { if (!more) wsMsg.value = (e as Error).message; toast((e as Error).message, true) }
 }
 async function installFromSearch(id: string) {
@@ -85,12 +86,12 @@ const day = (t: number) => t ? new Date(t * 1000).toLocaleDateString() : '—'
     <div class="card tool"><h2>切换地图</h2>
       <select v-model="map">
         <option v-for="m in CAMPAIGNS" :key="m[0]" :value="m[0]">{{ m[1] }} · {{ m[0] }}</option>
-        <optgroup v-for="a in customCampaigns" :key="a.name" :label="a.name"><option v-for="m in a.maps" :key="m" :value="m">{{ m }}</option></optgroup>
+        <optgroup v-for="a in mapAddons" :key="a.name" :label="a.name"><option v-for="m in a.maps" :key="m" :value="m">{{ m }}</option></optgroup>
       </select>
       <button @click="go(map)">切换</button>
-      <span class="mu">官方 14 个战役 + 已安装的自定义战役；切换会丢失当前进度</span>
+      <span class="mu">官方 14 个战役 + 已安装 VPK 中的地图；切换会丢失当前进度</span>
     </div>
-    <div class="card"><h2>安装新战役<span class="sp" />
+    <div class="card"><h2>安装 VPK / 战役<span class="sp" />
       <span class="tabs">
         <button v-if="session.features?.workshop" :class="{ on: tab === 'ws' }" @click="tab = 'ws'">工坊 ID / 链接</button>
         <button :class="{ on: tab === 'up' }" @click="tab = 'up'">上传 vpk / zip</button>
@@ -98,19 +99,19 @@ const day = (t: number) => t ? new Date(t * 1000).toLocaleDateString() : '—'
       </span></h2>
       <div class="mt" :class="{ on: tab === 'ws' }">
         <div class="row"><input v-model="wsId" placeholder="创意工坊 ID 或链接" style="flex:1;min-width:0" @keydown.enter="workshop"><button @click="workshop">下载安装</button></div>
-        <div class="note">直连 Steam CDN 分块下载，完成后自动安装、热加载，不用重启；玩家客户端也要订阅同一个创意工坊物品，否则进不了自定义战役。</div>
+        <div class="note">直连 Steam CDN 分块下载，完成后自动安装、热加载，不用重启；玩家客户端按作品要求订阅对应的创意工坊物品。</div>
       </div>
       <div class="mt" :class="{ on: tab === 'up' }">
         <div class="row"><input ref="fileEl" type="file" accept=".vpk,.zip" style="flex:1;min-width:0"><button @click="uploadFile">上传</button></div>
         <div class="mu">{{ upMsg }}</div>
-        <div class="note">zip（例如 gamemaps.com 下载的压缩包）会自动解压出里面的 vpk；不含地图（maps/*.bsp）的 vpk 一律拒收。</div>
+        <div class="note">zip（例如 gamemaps.com 下载的压缩包）会自动解压并安装里面的 VPK；没有地图的资源 VPK 也会保留，地图选择只显示其中含 maps/*.bsp 的文件。</div>
       </div>
       <div class="mt" :class="{ on: tab === 'search' }">
-        <div class="row"><input v-model="wsQuery" placeholder="战役名或关键字，留空 = 订阅最多的战役" style="flex:1;min-width:0" @keydown.enter="search()"><button @click="search()">搜索</button></div>
+        <div class="row"><input v-model="wsQuery" placeholder="工坊名或关键字，留空 = 订阅最多的内容" style="flex:1;min-width:0" @keydown.enter="search()"><button @click="search()">搜索</button></div>
         <div style="margin-top:8px">
           <div v-if="wsMsg" class="mu">{{ wsMsg }}</div>
           <div v-if="wsItems.length" class="tw"><table>
-            <tr><th /><th>战役</th><th>大小</th><th>订阅</th><th>更新</th><th /></tr>
+            <tr><th /><th>工坊内容</th><th>大小</th><th>订阅</th><th>更新</th><th /></tr>
             <tr v-for="i in wsItems" :key="i.id">
               <td><img v-if="i.preview" class="thumb" :src="i.preview" alt="" loading="lazy" @error="($event.target as HTMLImageElement).style.display = 'none'"></td>
               <td><b>{{ i.title }}</b><div class="mu">{{ i.tags.join(' · ') }}{{ i.desc ? (i.tags.length ? ' — ' : '') + i.desc : '' }}</div><code class="mu">{{ i.id }}</code></td>
@@ -120,10 +121,10 @@ const day = (t: number) => t ? new Date(t * 1000).toLocaleDateString() : '—'
           </table></div>
           <div v-if="wsItems.length && wsItems.length < wsTotal" class="row"><button class="g sm" @click="search(true)">加载更多</button><span class="mu">已显示 {{ wsItems.length }} / {{ wsTotal }}</span></div>
         </div>
-        <div class="note">只列出带 Campaigns 标签的物品；点“安装”走工坊下载通道，装前同样检查 vpk 里有没有地图。</div>
+        <div class="note">列出所有 L4D2 工坊内容；点“安装”会下载并安装 VPK。地图选择只显示已安装 VPK 中解析出的 maps/*.bsp。</div>
       </div>
     </div>
-    <div class="card"><h2>已安装的自定义战役<span class="sp" /><button class="g sm" @click="load">刷新</button></h2>
+    <div class="card"><h2>已安装的 VPK<span class="sp" /><button class="g sm" @click="load">刷新</button></h2>
       <div>
         <JobRow v-for="(j, id) in data.jobs" :key="'ws' + id" :label="'工坊 ' + id" :job="j"><button v-if="j.state === 'running'" class="g sm" @click="cancel(String(id))">取消</button></JobRow>
         <JobRow v-for="(j, t) in data.zips" :key="'zip' + t" label="打包" :job="j"><a v-if="j.state === 'done'" :href="'/api/download?token=' + t"> — 下载 {{ j.name }}（{{ j.size_mb }} MB）</a></JobRow>
@@ -140,7 +141,7 @@ const day = (t: number) => t ? new Date(t * 1000).toLocaleDateString() : '—'
             </td>
           </tr>
         </table></div>
-        <div v-else class="mu">还没有自定义战役</div>
+        <div v-else class="mu">还没有已安装的 VPK</div>
       </div>
       <div class="note">切到第一章会丢失当前进度；打包下载 = 把 vpk 压成 zip 给玩家手动安装；受保护的 vpk 不提供删除。</div>
     </div>

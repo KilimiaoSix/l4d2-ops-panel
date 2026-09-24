@@ -114,5 +114,5 @@ cd panel && python3 -m pytest          # 约 90 秒
 - **RCON 每条命令新建连接**：srcds 会掐掉空闲的 RCON 连接、多连接并存时应答会乱序，面板一分钟几条命令，连接 + 认证的开销可以忽略；`features`（120 s）和 game flags（15 s）两层缓存把 `/api/status` 每 10 秒一次的轮询压到几乎不发 RCON。
 - **A2S 被限流时用 RCON `status` 兜底**：L4D2 对 A2S 有速率限制，公网服务器一直被扫，单次查询经常撞到限流窗口；进程还在（`pgrep srcds_linux`）就改用 RCON 数人，`degraded: true` 标出来。
 - **工坊下载自己实现分块续传**：DepotDownloader 对 UGC 文件只发一条 GET、没有重试和续传，国内主机到 Akamai 的单连接速度不稳，大战役经常下不完；见 `integrations/workshop.py` 头部注释。
-- **所有安装途径共用一个门**：`services/addons.py` 的 `install_vpk()`——不是 VPK、没有 `maps/*.bsp`、想覆盖受保护文件的一律拒收并删除，上传 / zip / 工坊 / DepotDownloader 都走它。
+- **所有安装途径共用一个门**：`services/addons.py` 的 `install_vpk()`——不是 VPK、想覆盖受保护文件的一律拒收并删除；有效 VPK（包括没有 `maps/*.bsp` 的资源依赖包）都可安装，上传 / zip / 工坊 / DepotDownloader 都走它。地图选择由前端只使用解析出的 `maps/*.bsp`。
 - **后台任务一种形状**：`jobs.py` 里工坊下载和打包共用 `Job`（state / msg / done / total / speed / files / cancel），前端一个 `JobRow` 组件渲染两种。
