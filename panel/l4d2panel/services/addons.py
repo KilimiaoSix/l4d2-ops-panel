@@ -41,6 +41,7 @@ class AddonService:
         return {'name': name, 'size_mb': round(os.path.getsize(path) / 1048576, 1), 'maps': s['maps'], 'mission': s['mission'], 'protected': name in self.protected}
 
     def list(self):
+        if not self.paths.addons.is_dir(): return []
         return [self.info(n) for n in sorted(os.listdir(self.paths.addons)) if n.lower().endswith('.vpk')]
 
     def overview(self):
@@ -99,6 +100,7 @@ class AddonService:
     # ---- upload ----
     def upload_target(self, raw_name) -> tuple:
         """-> (safe name, temp path to stream the body into). Raises 400 unless the name ends in .vpk or .zip."""
+        if not self.paths.addons.is_dir(): raise ApiError(409, '请先安装游戏，再上传附加内容')
         name = safe_vpk_name(raw_name, ('.vpk', '.zip'))
         if not name: raise ApiError(400, '只接受 .vpk 或 .zip 文件')
         return name, self.paths.addons / (name + '.uploading')
@@ -129,6 +131,7 @@ class AddonService:
 
     # ---- workshop ----
     def start_workshop(self, text, actor: str) -> str:
+        if not self.paths.addons.is_dir(): raise ApiError(409, '请先安装游戏，再下载附加内容')
         m = PUBID.search(str(text or ''))
         if not m: raise ApiError(400, '请输入创意工坊 ID 或链接')
         pubid = m.group(1)
@@ -169,14 +172,15 @@ class AddonService:
             try: self.install_vpk(dest, job.name)
             except InvalidAddon as e: raise RuntimeError(str(e))
             el = int(time.time() - t0)
-            job.files = [job.name]; job.state = 'done'
+            job.files = [job.name]
             job.msg = f'已安装: {job.name}（{size / 1048576:.1f} MB，用时 {el // 60} 分 {el % 60} 秒） ' + self.refresh()
             self._wslog(pubid, job.msg)
+            job.state = 'done'
         except Exception as e:
             kept = os.path.exists(dest); cancelled = str(e) == workshop.CANCELLED
-            job.state = 'error'
             job.msg = (workshop.CANCELLED if cancelled else f'下载失败: {e}') + ('；已下载的部分已保留，再点一次“下载安装”会接着下' if kept else '')
             self._wslog(pubid, job.msg)
+            job.state = 'error'
 
     def _depot(self, pubid: str, job: Job, t0: float):
         """Fallback for items without a direct file_url: DepotDownloader into workshop_tmp/depot_<id> (kept on failure so it can resume)."""
@@ -191,8 +195,9 @@ class AddonService:
                     except InvalidAddon as e: bad.append(str(e))
         if not found: raise RuntimeError('；'.join(bad) or f'DepotDownloader 没有下载到 vpk（退出码 {code}，详见 workshop_tmp/{pubid}.log）')
         shutil.rmtree(tmp, ignore_errors=True); el = int(time.time() - t0)
-        job.files = found; job.state = 'done'
+        job.files = found
         job.msg = f'已安装: {", ".join(found)}（用时 {el // 60} 分 {el % 60} 秒） ' + self.refresh()
+        job.state = 'done'
 
     # ---- zip for download ----
     def start_zip(self, names, actor: str) -> str:

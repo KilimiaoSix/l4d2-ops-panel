@@ -26,5 +26,5 @@ def parse_steamid(raw, resolve_vanity=None) -> str:
     if vanity:
         id64 = resolve_vanity(vanity) if resolve_vanity else None
         if id64: return from_accountid(int(id64) - STEAMID64_BASE)
-        raise ValueError('无法解析自定义主页链接（服务器可能连不上 steamcommunity.com）；请改用 SteamID、17 位好友码，或 /profiles/数字 链接')
+        raise ValueError('无法解析自定义主页链接（服务器连不上 steamcommunity.com，也没有可用的 steam_api_key）；请改用 SteamID、17 位好友码，或 /profiles/数字 链接')
     raise ValueError('无法识别的 Steam 标识')

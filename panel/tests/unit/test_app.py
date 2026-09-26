@@ -15,7 +15,8 @@ def app_ctx(tmp_path, game_dir, fake_game, fake_steam):
     s = Settings(password=OWNER_PW, db=str(tmp_path / 'panel.db'), rcon_host='127.0.0.1', rcon_port=fake_game.port, rcon_password=RCON_PASSWORD,
                  game_dir=str(game_dir.root), lgsm_script=str(lgsm), console_log='', perf_csv='', depotdownloader='',
                  steam_api_base=fake_steam.base, steam_community_base=fake_steam.base)
-    ctx = build_context(s, tmp_path)
+    conf = tmp_path / 'panel.json'; conf.write_text(s.model_dump_json(), encoding='utf-8')
+    ctx = build_context(s, tmp_path, conf)
     client = TestClient(create_app(ctx))
     assert client.post('/api/login', json={'username': OWNER_USER, 'password': OWNER_PW}).status_code == 200
     return ctx, client

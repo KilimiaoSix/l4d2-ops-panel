@@ -16,3 +16,12 @@ frontend/node_modules/
 frontend/dist/
 panel/devenv/
 panel/docker/
+panel/pack_state/
+panel/basic_state/
+tools/release/*private*.pem
+panel/.panel-restart-*.json
+panel/packs/payloads/
+panel/packs/payload-manifest.json
+panel/packs/licenses/
+.release-cache/
+dist/

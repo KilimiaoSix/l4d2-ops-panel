@@ -53,8 +53,8 @@ class AuthService:
         if self.accounts.count(): return
         u = self.settings.bootstrap_user
         if self.settings.password:
-            self.accounts.create(u, hash_pw(self.settings.password), 'owner')
-            print(f'[panel] seeded owner account "{u}" from panel.json password (change it in the 账号 tab)', flush=True)
+            if self.accounts.create_initial_owner(u, hash_pw(self.settings.password)) is not None:
+                print(f'[panel] seeded owner account "{u}" from panel.json password (change it in the 账号 tab)', flush=True)
         else:
             print(f'[panel] no accounts yet: the first visit to the panel sets the password of "{u}"', flush=True)
 
@@ -63,7 +63,8 @@ class AuthService:
         if len(password) < 4: raise ApiError(400, '密码至少 4 位')
         if not self.setup_needed(): raise ApiError(409, '面板已经初始化过了，请直接登录')
         u = self.settings.bootstrap_user
-        aid = self.accounts.create(u, hash_pw(password), 'owner', last_login=int(time.time()))
+        aid = self.accounts.create_initial_owner(u, hash_pw(password), last_login=int(time.time()))
+        if aid is None: raise ApiError(409, '面板已经初始化过了，请直接登录')
         self.audit.add(u, 'setup', ip); print(f'[panel] owner account "{u}" created from {ip}', flush=True)
         return self.sessions.create(aid)
 

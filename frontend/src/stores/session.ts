@@ -32,6 +32,7 @@ export const session = reactive({
   },
 
   async refreshPlayers() {
+    if (this.status?.game_installed === false) { this.players = []; return }
     try { this.players = (await getPlayers()).players } catch { /* keep the last list */ }
   },
 

@@ -9,6 +9,7 @@ re-reads that file after each command.
 Runnable on its own for local development:  python3 -m tests.fakes.game [--port N] [--whitelist PATH]
 """
 import argparse, re, socket, struct, sys, threading, time
+from pathlib import Path
 
 # Real reply of the live server (SteamIDs / addresses masked) plus one boundary row: a name containing quotes,
 # an hours-long session and a non-"active" state. Humans carry an extra number between userid and name,
@@ -39,13 +40,15 @@ players : 0 humans, 0 bots (12 max) (hibernating) (unreserved)
 HUMANS = [{'userid': '26', 'name': '桐喵Six', 'steamid': 'STEAM_1:0:12345678', 'time': '05:40', 'ping': '99', 'loss': '0', 'state': 'active'},
           {'userid': '116', 'name': 'a "quoted" name', 'steamid': 'STEAM_1:1:87654321', 'time': '1:02:33', 'ping': '45', 'loss': '2', 'state': 'spawning'}]
 A2S_INFO = {'name': '求生之路2 - 10人合作服', 'map': 'c2m1_highway', 'players': 2, 'max': 12, 'bots': 5}
-PLUGINS_LIST = '''[SM] Listing 6 plugins:
+PLUGINS_LIST = '''[SM] Listing 8 plugins:
   01 "Private Whitelist" (1.2.0) by kilimiao
   02 "SI Preset" (1.0.0) by kilimiao
   03 "Points System" (1.7.7) by ...
   04 "Basic Commands" (1.12.0.7210) by AlliedModders LLC
   05 "Admin Menu" (1.12.0.7210) by AlliedModders LLC
-  06 "MyPlugin" (0.1) by test'''
+  06 "MyPlugin" (0.1) by test
+  07 "[L4D1 & L4D2] Infected Bots" (2.8.0) by test
+  08 "Left 4 DHooks Direct" (1.159) by test'''
 DAMAGE_CVARS = {f'survivor_friendly_fire_factor_{d}': '0.1' for d in ('easy', 'normal', 'hard', 'expert')}
 DAMAGE_CVARS.update({f'survivor_burn_factor_{d}': '0.5' for d in ('easy', 'normal', 'hard', 'expert')})
 PLUGIN_VERBS = {'reload': 'reloaded', 'load': 'loaded', 'unload': 'unloaded'}
@@ -75,7 +78,17 @@ class FakeGame:
         self.password, self.whitelist_path, self.a2s_challenge = password, str(whitelist_path) if whitelist_path else None, a2s_challenge
         self.a2s_on = True; self.commands = []; self.status_text = STATUS_BUSY; self.auth_failures = 0
         self.state = {'preset': 'te12', 'difficulty': 'Normal', 'cvars': dict(mp_gamemode='coop', sm_whitelist_enable='1', **DAMAGE_CVARS)}
+        self.state['cvars'].update(hostname='test server', sv_password='', sv_region='255', sv_setmax='31',
+            sv_maxplayers='4', l4d_multislots_max_survivors='4', l4d_multislots_min_survivors='4',
+            sv_force_unreserved='1', sv_allow_lobby_connect_only='0')
+        self.hostname_path = Path(whitelist_path).parent.parent / 'data/panel_hostname.txt' if whitelist_path else None
+        self.hostname_mismatch = False
+        self.hostname_enabled = True
+        self.cvar_overrides = {}
+        self.missing_cvars = set()
         self._lock = threading.Lock()
+        self._stopped = threading.Event()
+        self._connections = set()
         for _ in range(50):   # srcds answers RCON and A2S on the same port number: find one free for both TCP and UDP
             t = socket.socket(); t.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); t.bind(('127.0.0.1', port)); p = t.getsockname()[1]
             u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -87,17 +100,27 @@ class FakeGame:
             raise RuntimeError('no port free for both TCP and UDP')
         self.port, self.tcp, self.udp = p, t, u
         t.listen(16)
-        threading.Thread(target=self._accept, daemon=True).start()
-        threading.Thread(target=self._a2s, daemon=True).start()
+        t.settimeout(0.2); u.settimeout(0.2)
+        self._threads = [threading.Thread(target=self._accept, daemon=True), threading.Thread(target=self._a2s, daemon=True)]
+        for thread in self._threads: thread.start()
 
     # ---- RCON ----
     def _accept(self):
-        while True:
+        while not self._stopped.is_set():
             try: c, _ = self.tcp.accept()
+            except socket.timeout: continue
             except OSError: return
+            if self._stopped.is_set(): c.close(); return
             threading.Thread(target=self._conn, args=(c,), daemon=True).start()
 
     def _conn(self, c):
+        with self._lock: self._connections.add(c)
+        try: self._serve_conn(c)
+        except OSError: pass
+        finally:
+            with self._lock: self._connections.discard(c)
+
+    def _serve_conn(self, c):
         with c:
             authed = False
             while True:
@@ -119,6 +142,14 @@ class FakeGame:
         s = self.state; cmd = cmd.strip()
         if cmd == 'status': return self.status_text
         if cmd == 'sm plugins list': return PLUGINS_LIST
+        if cmd in ('sm_panel_hostname_reload', 'sm_panel_hostname_status'):
+            if not self.hostname_enabled: return 'Unknown command "sm_panel_hostname_status"'
+            try: name = self.hostname_path.read_text(encoding='utf-8').rstrip('\n')
+            except (OSError, AttributeError): name = ''
+            if cmd.endswith('_reload') and name and not self.hostname_mismatch: s['cvars']['hostname'] = name
+            actual = s['cvars']['hostname']
+            state = 'missing' if not name else 'ok' if actual == name else 'mismatch'
+            return f'PANEL_HOSTNAME expected={name.encode().hex()} actual={actual.encode().hex()} state={state}'
         if cmd == 'sm_preset': return f'[SM] 当前: {s["preset"]}（可选 auto / te8 / te12 / te16）'
         m = re.fullmatch(r'sm_preset (\w+)', cmd)
         if m: s['preset'] = m.group(1); return f'[SM] 特感预设已切换为 {m.group(1)}'
@@ -126,10 +157,22 @@ class FakeGame:
         m = re.fullmatch(r'z_difficulty (\w+)', cmd)
         if m: s['difficulty'] = m.group(1); return ''
         m = re.fullmatch(r'sm_cvar (\S+)', cmd)
-        if m: return f'[SM] Value of cvar "{m.group(1)}": "{s["cvars"].get(m.group(1), "0")}"'
-        m = re.fullmatch(r'sm_cvar (\S+) (\S+)', cmd)
-        if m: s['cvars'][m.group(1)] = m.group(2); return f'[SM] Changed cvar "{m.group(1)}" to "{m.group(2)}".'
-        if cmd in s['cvars']: return f'"{cmd}" = "{s["cvars"][cmd]}"\n game replicated\n - factor'
+        if m:
+            name = m.group(1)
+            if name not in s['cvars'] or name in self.missing_cvars: return f'[SM] Unable to find cvar: {name}'
+            value = '***PROTECTED***' if name == 'sv_password' else s['cvars'][name]
+            return f'[SM] Value of cvar "{name}": "{value}"'
+        m = re.fullmatch(r'(?:sm_cvar )?([a-zA-Z0-9_]+) (?:"([^"\r\n]*)"|([^\s"]+))', cmd)
+        if m and (cmd.startswith('sm_cvar ') or m.group(1) in s['cvars']):
+            name, quoted, unquoted = m.groups()
+            if name in self.missing_cvars or name not in s['cvars']: return f'Unknown command "{name}"'
+            value = quoted if quoted is not None else unquoted
+            s['cvars'][name] = self.cvar_overrides.get(name, value)
+            return ''
+        if cmd in s['cvars']:
+            if cmd in self.missing_cvars: return f'Unknown command "{cmd}"'
+            value = '***PROTECTED***' if cmd == 'sv_password' else s['cvars'][cmd]
+            return f'"{cmd}" = "{value}"\n game replicated\n - factor'
         m = re.fullmatch(r'sm_wl_addid (\S+)(?: "(.*)")?', cmd)
         if m: self._wl_add(m.group(1), m.group(2) or ''); return f'[SM] 已加入白名单: {m.group(1)}'
         m = re.fullmatch(r'sm_wl_del (\S+)', cmd)
@@ -165,17 +208,27 @@ class FakeGame:
         info = (b'\xFF\xFF\xFF\xFFI\x11' + A2S_INFO['name'].encode() + b'\x00' + A2S_INFO['map'].encode() + b'\x00left4dead2\x00Left 4 Dead 2\x00'
                 + struct.pack('<H', 550) + bytes([A2S_INFO['players'], A2S_INFO['max'], A2S_INFO['bots']]) + b'dl\x00\x01')
         req = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
-        while True:
+        while not self._stopped.is_set():
             try: d, addr = self.udp.recvfrom(4096)
+            except socket.timeout: continue
             except OSError: return
             if not self.a2s_on or not d.startswith(req): continue
             if self.a2s_challenge and len(d) == len(req): self.udp.sendto(b'\xFF\xFF\xFF\xFFA\x0b\xad\xca\xfe', addr)
             elif not self.a2s_challenge or d[len(req):] == b'\x0b\xad\xca\xfe': self.udp.sendto(info, addr)
 
     def stop(self):
+        self._stopped.set()
+        with self._lock: connections = list(self._connections)
+        for s in connections:
+            try: s.shutdown(socket.SHUT_RDWR)
+            except OSError: pass
+            s.close()
         for s in (self.tcp, self.udp):
+            try: s.shutdown(socket.SHUT_RDWR)
+            except OSError: pass
             try: s.close()
             except OSError: pass
+        for thread in self._threads: thread.join(timeout=1)
 
 
 if __name__ == '__main__':

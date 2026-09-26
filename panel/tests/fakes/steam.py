@@ -1,6 +1,6 @@
 """Fake Steam for workshop tests: the Web API the panel queries, a CDN that serves the item file with Range
-support (optionally failing the first N range requests or holding them until released), and the
-steamcommunity vanity-URL XML used to resolve custom profile links.
+support (optionally failing the first N range requests or holding them until released), and both vanity-URL
+lookups: the Web API ResolveVanityURL endpoint and the steamcommunity XML fallback (`vanity[name] = id64`).
 
 `add_item(pubid, data, ...)` registers a published file and its bytes; `items[pubid]` is the JSON the
 API returns, so tests can override fields (file_type=2 for a collection, consumer_app_id, ...).
@@ -35,6 +35,9 @@ class FakeSteam:
             def _json(self, obj, code=200):
                 b = json.dumps(obj).encode(); self.send_response(code); self.send_header('Content-Type', 'application/json')
                 self.send_header('Content-Length', str(len(b))); self.end_headers(); self.wfile.write(b)
+            def _denied(self):
+                b = b'<html><body>Access is denied</body></html>'
+                self.send_response(403); self.send_header('Content-Length', str(len(b))); self.end_headers(); self.wfile.write(b)
             def do_POST(self):
                 fake.requests.append(('POST', self.path, None))
                 body = parse_qs(self.rfile.read(int(self.headers.get('Content-Length', 0) or 0)).decode())
@@ -48,8 +51,7 @@ class FakeSteam:
                 u = urlparse(self.path)
                 if u.path == '/IPublishedFileService/QueryFiles/v1/':
                     qs = parse_qs(u.query); fake.queries.append(qs)
-                    if qs.get('key') != [fake.api_key]:
-                        b = b'<html><body>Access is denied</body></html>'; self.send_response(403); self.send_header('Content-Length', str(len(b))); self.end_headers(); self.wfile.write(b); return
+                    if qs.get('key') != [fake.api_key]: return self._denied()
                     if qs.get('page') == ['2']: return self._json({'response': {'total': 57, 'publishedfiledetails': []}})
                     return self._json({'response': {'total': 57, 'publishedfiledetails': fake.search_results}})
                 m = re.fullmatch(r'/files/([^/?]+)', self.path)
@@ -65,6 +67,11 @@ class FakeSteam:
                         self.end_headers(); self.wfile.write(chunk); self.wfile.flush(); self.connection.close(); return
                     self.send_response(206); self.send_header('Content-Type', 'application/octet-stream'); self.send_header('Content-Range', f'bytes {a}-{b}/{len(data)}')
                     self.send_header('Content-Length', str(len(chunk))); self.end_headers(); self.wfile.write(chunk); return
+                if u.path == '/ISteamUser/ResolveVanityURL/v1/':
+                    qs = parse_qs(u.query)
+                    if qs.get('key') != [fake.api_key]: return self._denied()
+                    id64 = fake.vanity.get((qs.get('vanityurl') or [''])[0])
+                    return self._json({'response': {'steamid': id64, 'success': 1} if id64 else {'success': 42, 'message': 'No match'}})
                 m = re.fullmatch(r'/id/([^/?]+)/\?xml=1', self.path)
                 if m:
                     id64 = fake.vanity.get(m.group(1)); b = (f'<profile><steamID64>{id64}</steamID64></profile>' if id64 else '<response><error>The specified profile could not be found.</error></response>').encode()

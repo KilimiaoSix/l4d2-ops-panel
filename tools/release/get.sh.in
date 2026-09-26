@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Generated release bootstrap. Initial script trust comes from its documented HTTPS
+# entry and published digest. The embedded key authenticates subsequent assets only.
+set -Eeuo pipefail
+umask 077
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+RELEASE_VERSION='@@VERSION@@'
+PRIMARY='https://github.com/KilimiaoSix/l4d2-ops-panel/releases/download'
+MIRROR='@@MIRROR@@'
+OFFLINE=''
+ARGS=()
+fail() { echo "安装失败：$*" >&2; exit 1; }
+usage() { echo '用法：sudo bash get.sh [--version 版本] [--mirror HTTPS根地址] [--offline-dir 本地签名发布包目录] [--host 域名或IP] [--repair-docker]'; }
+while (($#)); do
+  case "$1" in
+    --version|--mirror|--offline-dir|--host)
+      (($# >= 2)) || fail "$1 缺少值"
+      case "$1" in
+        --version) RELEASE_VERSION=$2;; --mirror) MIRROR=${2%/};; --offline-dir) OFFLINE=$2;; --host) ARGS+=(--host "$2");;
+      esac
+      shift 2;;
+    --repair-docker) ARGS+=(--repair-docker); shift;;
+    --help|-h) usage; exit 0;;
+    *) usage; fail "未知参数：$1";;
+  esac
+done
+[[ $RELEASE_VERSION =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || fail '版本格式无效'
+[[ $EUID == 0 ]] || fail '请使用 sudo bash get.sh'
+[[ $(uname -m) == x86_64 ]] || fail '仅支持 x86_64 架构'
+[[ -r /etc/os-release ]] || fail '缺少操作系统信息'
+. /etc/os-release
+[[ $ID == ubuntu && ($VERSION_ID == 22.04 || $VERSION_ID == 24.04) ]] || fail '仅支持 Ubuntu 22.04/24.04'
+[[ -d /run/systemd/system ]] || fail '需要以 systemd 启动的完整系统'
+exec 9>/run/l4d2panel-bootstrap.lock
+flock -n 9 || fail '另一个安装或修复正在运行'
+WORK=$(mktemp -d /var/tmp/l4d2-bootstrap.XXXXXXXX)
+trap 'rm -rf -- "$WORK"' EXIT
+trap 'echo "安装阶段失败；请按上方原因修复后重跑原命令。现有游戏和数据保留。" >&2' ERR
+export DEBIAN_FRONTEND=noninteractive
+if ! command -v curl >/dev/null || ! command -v openssl >/dev/null || ! command -v python3 >/dev/null; then
+  apt-get update
+  apt-get install --yes --no-upgrade ca-certificates curl openssl python3
+fi
+cat > "$WORK/public.pem" <<'PUBLIC_KEY'
+@@PUBLIC_KEY@@
+PUBLIC_KEY
+cat > "$WORK/verify.py" <<'VERIFIER_CODE'
+@@VERIFIER@@
+VERIFIER_CODE
+python3 - "$MIRROR" <<'CHECK_URL'
+import sys
+from urllib.parse import urlsplit
+value = sys.argv[1]
+if value:
+    url = urlsplit(value)
+    if (url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment
+            or any(c.isspace() or ord(c) < 32 for c in value)):
+        raise SystemExit('镜像必须为不含凭据、查询参数的 HTTPS 根地址')
+CHECK_URL
+mkdir "$WORK/assets"
+download() {
+  local base=$1 name
+  for name in SHA256SUMS SHA256SUMS.sig VERSION get.sh l4d2-panel-linux-x86_64.tar.gz; do
+    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+      --connect-timeout 15 --max-time 600 --retry 2 --max-filesize 1073741824 \
+      "$base/v$RELEASE_VERSION/$name" --output "$WORK/assets/$name" || return 1
+  done
+}
+if [[ -n $OFFLINE ]]; then
+  for name in SHA256SUMS SHA256SUMS.sig VERSION get.sh l4d2-panel-linux-x86_64.tar.gz; do
+    [[ -f $OFFLINE/$name && ! -L $OFFLINE/$name ]] || fail "离线发布物缺少普通文件 $name"
+    cp -- "$OFFLINE/$name" "$WORK/assets/$name"
+  done
+elif ! download "$PRIMARY"; then
+  [[ -n $MIRROR ]] || fail '官方源不可达，且此发布脚本没有已配置的国内镜像'
+  echo '官方源下载失败，使用已配置镜像；仍执行相同签名校验。'
+  download "$MIRROR" || fail '官方源和镜像均下载失败'
+fi
+python3 "$WORK/verify.py" --directory "$WORK/assets" --public-key "$WORK/public.pem" \
+  --version "$RELEASE_VERSION" --extract "$WORK/release"
+python3 "$WORK/release/tools/bootstrap/install.py" --release "$WORK/release" --version "$RELEASE_VERSION" "${ARGS[@]}"

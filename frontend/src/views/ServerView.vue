@@ -4,7 +4,10 @@ import { cancelInstall, getInstall, serverAction, startInstall } from '../api/en
 import type { InstallDefaults, InstallOverview } from '../api/types'
 import { toast } from '../composables/useToast'
 import { session } from '../stores/session'
+import { getOnboarding } from '../api/panel'
+import { api } from '../api/client'
 
+const props = defineProps<{ persistDraft?: boolean }>()
 const st = computed(() => session.status)
 const NAMES: Record<string, string> = { restart: '重启', start: '启动', stop: '停止', monitor: '巡检' }
 const load = computed(() => st.value?.sys.load?.split(' ') ?? [])
@@ -15,11 +18,22 @@ const actMsg = computed(() => (st.value?.action.running ? '正在执行 ' + st.v
 const actionPending = ref(false)
 const info = ref<InstallOverview | null>(null), error = ref(''), submitting = ref(false), cancelling = ref(false)
 const form = ref<InstallDefaults>({ game_port: 27015, tick: 30, vac: false, mirror_url: 'docker.cnb.cool' })
+const draftState = ref('')
 const running = computed(() => info.value?.job?.state === 'running')
 const busy = computed(() => !!running.value || submitting.value || actionPending.value || !!st.value?.action.running)
 const progress = computed(() => info.value?.job?.total ? Math.min(100, Math.round(100 * (info.value.job.done || 0) / info.value.job.total)) : null)
 let timer: ReturnType<typeof setTimeout> | undefined, alive = true, loading = false, defaultsSet = false
 let revision = 0
+let draftQueue: Promise<unknown> = Promise.resolve()
+
+function saveDraft() {
+  if (!props.persistDraft || !defaultsSet || !Number.isInteger(form.value.game_port) || form.value.game_port < 1 || form.value.game_port > 65535) return
+  const draft = { game_port: form.value.game_port, tick: form.value.tick, vac: form.value.vac }
+  draftState.value = '正在保存安装选项…'
+  draftQueue = draftQueue.catch(() => {}).then(() => api('/api/onboarding', { draft }))
+    .then(() => { if (alive) draftState.value = '安装选项已保存，刷新后可继续' })
+    .catch(e => { if (alive) draftState.value = '安装选项未保存：' + (e as Error).message })
+}
 
 async function refresh() {
   if (loading || !alive) return
@@ -30,7 +44,17 @@ async function refresh() {
     if (!alive || requestRevision !== revision) return
     const wasRunning = running.value
     info.value = result; error.value = ''
-    if (!defaultsSet) { form.value = { ...result.defaults }; defaultsSet = true }
+    if (!defaultsSet) {
+      const draft = props.persistDraft ? (await getOnboarding()).draft : {}
+      if (!alive || requestRevision !== revision) return
+      form.value = { ...result.defaults }
+      if (!result.installed) {
+        if (typeof draft.game_port === 'number') form.value.game_port = draft.game_port
+        if (draft.tick === 30 || draft.tick === 60 || draft.tick === 100 || draft.tick === 128) form.value.tick = draft.tick
+        if (typeof draft.vac === 'boolean') form.value.vac = draft.vac
+      }
+      defaultsSet = true
+    }
     if (wasRunning && result.job?.state !== 'running') void session.refreshStatus()
   } catch (e) {
     if (alive && requestRevision === revision) error.value = (e as Error).message
@@ -52,13 +76,14 @@ async function act(name: string) {
   finally { actionPending.value = false }
 }
 async function beginInstall() {
-  if (busy.value || !info.value?.available || info.value.installed || error.value) return
+  if (busy.value || !defaultsSet || !info.value?.available || info.value.installed || error.value) return
   if (!Number.isInteger(form.value.game_port) || form.value.game_port < 1 || form.value.game_port > 65535) {
     toast('端口必须是 1 到 65535 的整数', true); return
   }
   if (!confirm('将下载 L4D2 游戏镜像，安装到显示的游戏目录并启动。完成后由当前面板管理，继续？')) return
   submitting.value = true; revision++
   try {
+    await draftQueue
     await startInstall({ ...form.value, mirror_url: form.value.mirror_url.trim() })
     toast('安装任务已提交，可离开页面后回来查看')
     revision++
@@ -96,13 +121,14 @@ onBeforeUnmount(() => { alive = false; revision++; clearTimeout(timer) })
       <div v-if="info && !info.available" role="alert" class="hint">{{ info.reason }}</div>
       <template v-if="!info?.installed">
         <div class="row">
-          <label>游戏端口 <input v-model.number="form.game_port" type="number" min="1" max="65535" style="width:100px" :disabled="busy || !info"></label>
-          <label>Tick <select v-model.number="form.tick" :disabled="busy || !info"><option v-for="n in [30, 60, 100, 128]" :key="n" :value="n">{{ n }}</option></select></label>
-          <label><input v-model="form.vac" type="checkbox" :disabled="busy || !info"> 启用 VAC</label>
+          <label>游戏端口 <input v-model.number="form.game_port" @input="saveDraft" type="number" min="1" max="65535" style="width:100px" :disabled="busy || !info || !defaultsSet"></label>
+          <label>Tick <select v-model.number="form.tick" @change="saveDraft" :disabled="busy || !info || !defaultsSet"><option v-for="n in [30, 60, 100, 128]" :key="n" :value="n">{{ n }}</option></select></label>
+          <label><input v-model="form.vac" @change="saveDraft" type="checkbox" :disabled="busy || !info || !defaultsSet"> 启用 VAC</label>
         </div>
         <div class="row"><label for="docker-mirror">镜像源</label><input id="docker-mirror" v-model="form.mirror_url" placeholder="留空使用 Docker Hub" :disabled="busy || !info" style="flex:1"></div>
+        <p v-if="draftState" class="mu" role="status">{{ draftState }}</p>
         <div class="row">
-          <button v-if="!running" :disabled="busy || !info?.available || !!error" @click="beginInstall">{{ submitting ? '正在提交…' : info?.job?.state === 'error' ? '重试安装' : '开始安装' }}</button>
+          <button v-if="!running" :disabled="busy || !defaultsSet || !info?.available || !!error" @click="beginInstall">{{ submitting ? '正在提交…' : info?.job?.state === 'error' ? '重试安装' : '开始安装' }}</button>
           <button v-else class="d" :disabled="cancelling || info?.job?.cancel" @click="stopInstall">{{ cancelling || info?.job?.cancel ? '正在取消…' : '取消安装' }}</button>
         </div>
       </template>

@@ -1,5 +1,7 @@
 """First-run setup, login, sessions, rate limiting and the auth gate on every API route."""
 import pytest
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 from tests.conftest import OWNER_PW, OWNER_USER
 
@@ -80,3 +82,17 @@ def test_two_sessions_are_independent(panel):
     assert a.post('/api/logout', json={}).json() == {'ok': True}
     assert a.get('/api/me').status_code == 401
     assert b.get('/api/me').status_code == 200
+
+
+@pytest.mark.panel(password='')
+def test_simultaneous_first_setup_is_success_and_conflict(panel):
+    barrier = threading.Barrier(2)
+    def setup(i):
+        with panel.client() as c:
+            barrier.wait()
+            response = c.post('/api/setup', json={'password': f'password-{i}'})
+            return response.status_code, c.get('/api/me').status_code
+    with ThreadPoolExecutor(2) as pool:
+        result = list(pool.map(setup, range(2)))
+    assert sorted(result) == [(200, 200), (409, 401)]
+    assert panel.audit_actions().count((OWNER_USER, 'setup')) == 1

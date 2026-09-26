@@ -4,6 +4,7 @@ One shape for every job: state (running / done / error), msg, done / total / spe
 title for what it produced, cancel as the co-operative stop flag. The registry runs each job in a daemon thread
 and turns an exception into state=error with the exception text as msg."""
 import os, threading, time
+from .operations import OperationGate
 
 
 class Job:
@@ -24,36 +25,50 @@ class Job:
 
 
 class JobRegistry:
-    def __init__(self):
-        self.jobs = {}; self.lock = threading.Lock()
+    def __init__(self, gate=None):
+        self.jobs = {}; self.lock = threading.RLock()
+        self.gate = gate if gate is not None else OperationGate()
 
     def get(self, kind, id):
-        return self.jobs.get((kind, id))
+        with self.lock: return self.jobs.get((kind, id))
 
     def is_running(self, kind, id):
         j = self.get(kind, id); return bool(j and j.state == 'running')
 
     def start(self, kind, id, fn, initial_msg=''):
         """Run fn(job) in a background thread. Raises if a job with this kind/id is still running."""
-        with self.lock:
-            if self.is_running(kind, id): raise RuntimeError('already running')
-            job = self.jobs[(kind, id)] = Job(id, kind); job.msg = initial_msg
+        self.gate.enter()
+        try:
+            with self.lock:
+                if self.is_running(kind, id): raise RuntimeError('already running')
+                job = self.jobs[(kind, id)] = Job(id, kind); job.msg = initial_msg
+        except Exception:
+            self.gate.leave()
+            raise
         def work():
             try:
                 fn(job)
                 if job.state == 'running': job.state = 'done'
             except Exception as e:
                 job.state, job.msg = 'error', str(e)
-        threading.Thread(target=work, daemon=True, name=f'{kind}-{id}').start()
+            finally:
+                self.gate.leave()
+        try: threading.Thread(target=work, daemon=True, name=f'{kind}-{id}').start()
+        except Exception:
+            job.state, job.msg = 'error', '无法启动后台任务'
+            self.gate.leave()
+            raise
         return job
 
     def cancel(self, kind, id) -> bool:
-        j = self.get(kind, id)
-        if not j or j.state != 'running': return False
-        j.cancel = True; return True
+        with self.lock:
+            j = self.get(kind, id)
+            if not j or j.state != 'running': return False
+            j.cancel = True; return True
 
     def snapshot(self, kind):
-        return {id: j.to_dict() for (k, id), j in self.jobs.items() if k == kind}
+        with self.lock:
+            return {id: j.to_dict() for (k, id), j in self.jobs.items() if k == kind}
 
 
 class DownloadStore:

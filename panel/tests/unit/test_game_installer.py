@@ -50,13 +50,24 @@ def install_app(tmp_path, fake_game, fake_steam):
                  install_dir=str(tmp_path / 'install'), rcon_host='127.0.0.1', rcon_port=fake_game.port,
                  rcon_password='old-password', steam_api_base=fake_steam.base, steam_community_base=fake_steam.base,
                  lgsm_script='')
-    ctx = build_context(s, tmp_path)
+    conf = tmp_path / 'panel.json'; conf.write_text(s.model_dump_json(), encoding='utf-8')
+    ctx = build_context(s, tmp_path, conf)
     fake = FakeInstaller(tmp_path)
     ctx.game_install.installer = fake
     client = TestClient(create_app(ctx))
     assert client.post('/api/login', json={'username': 'admin', 'password': 'owner-pass'}).status_code == 200
     yield ctx, client, fake
     fake.gate.set()
+
+
+def test_configuration_locks_managed_installer_paths(install_app):
+    ctx, client, installer = install_app
+    installer.installed = lambda: True
+    response = client.get('/api/panel-config').json()
+    assert not response['fields']['game_dir']['editable']
+    assert not response['fields']['install_dir']['editable']
+    result = client.post('/api/panel-config', json={'revision': response['revision'], 'updates': {'game_dir': '/tmp/relocated'}, 'restart': True})
+    assert result.status_code == 409
 
 
 def finished(c):

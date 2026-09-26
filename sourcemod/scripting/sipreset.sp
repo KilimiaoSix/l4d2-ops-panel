@@ -28,6 +28,8 @@ public void OnMapStart() { Apply(false); }
 
 void Apply(bool announce)
 {
+	// The helper ships in the minimal pack but must not alter vanilla gameplay.
+	if (FindConVar("l4d_infectedbots_read_data") == null) return;
 	int commons = 30, mobmin = 10, mobmax = 30, mega = 50;
 	if (StrEqual(g_sPreset, "te12")) { commons = 25; mobmax = 20; mega = 40; }
 	else if (StrEqual(g_sPreset, "te16")) { commons = 20; mobmax = 15; mega = 35; }
@@ -43,6 +45,10 @@ void Apply(bool announce)
 
 public Action Cmd_Preset(int client, int args)
 {
+	if (FindConVar("l4d_infectedbots_read_data") == null) {
+		ReplyToCommand(client, "[Preset] Infected Bots is not loaded; install the infected pack first.");
+		return Plugin_Handled;
+	}
 	if (args < 1)
 	{
 		ReplyToCommand(client, "[预设] 当前: %s | 可选: auto(按人数 4-16) te8 te12 te16", g_sPreset);

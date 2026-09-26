@@ -41,7 +41,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--keep', action='store_true', help='keep the local panel open for browser checks until Ctrl-C')
     args = parser.parse_args()
-    root = Path(tempfile.mkdtemp(prefix='l4d2-docker-smoke-')).resolve()
+    root = Path(tempfile.mkdtemp(prefix='l4d2-docker-smoke-', dir='/var/tmp')).resolve()
     project = 'panel-smoke-' + uuid.uuid4().hex[:10]
     image = project + ':local'
     build = root / 'image'; build.mkdir()
@@ -57,14 +57,17 @@ def main():
                                     'COPY left4dead2 /l4d2/left4dead2\nCOPY srcds_run /l4d2/srcds_run\n'
                                     'RUN chmod 755 /l4d2/srcds_run\nCMD ["sleep", "infinity"]\n')
     with open(root / 'build.log', 'w') as log:
-        subprocess.run(['docker', 'build', '--platform', 'linux/amd64', '-t', image, str(build)], check=True,
-                       stdout=log, stderr=subprocess.STDOUT)
+        result = subprocess.run(['docker', 'build', '--platform', 'linux/amd64', '-t', image, str(build)],
+                                stdout=log, stderr=subprocess.STDOUT)
+    if result.returncode:
+        raise RuntimeError(f'Docker build failed; evidence: {root}\n' + (root / 'build.log').read_text())
     port = free_port()
     config = dict(password='docker-smoke-password', port=free_port(), game_dir=str(root / 'game'),
                   install_dir=str(root / 'install'), docker_project=project, rcon_port=port,
                   lgsm_script='', console_log='', perf_csv='', rcon_password='stale-password')
     settings = Settings(**config)
-    ctx = build_context(settings, root)
+    conf = root / 'panel.json'; conf.write_text(settings.model_dump_json(), encoding='utf-8')
+    ctx = build_context(settings, root, conf)
     ctx.game_install.installer = DockerGameInstaller(ctx.paths.install_dir, ctx.paths.game, project, image_override=image)
     app = create_app(ctx)
     server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=settings.port, log_level='error'))
@@ -130,7 +133,7 @@ def main():
         action('restart')
         wait_for(lambda: get('/api/status')['online'])
         check('restart preserves server.cfg bytes', ctx.paths.server_cfg.read_bytes() == before)
-        restored = build_context(Settings(**config), root)
+        restored = build_context(Settings(**config), root, conf)
         check('panel restart recovers Docker backend and RCON port', restored.settings.server_backend == 'docker' and restored.game.rcon.port == port)
         check('panel restart reads correct RCON secret', 'hostname' in restored.game.rcon.run('status'))
         result = {'passed': len(checks), 'checks': checks, 'kind': 'real Docker with protocol fixture', 'project': project}

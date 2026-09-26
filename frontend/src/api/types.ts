@@ -8,6 +8,8 @@ export interface Features {
 }
 
 export interface Status {
+  join: { address: string; command: string; port: number; engine_port: number; error: string; public_access: 'unverified' }
+  boot: string; config_revision: string; onboarding_complete: boolean; game_installed: boolean
   online: boolean
   name?: string; map?: string; players?: number; max?: number; bots?: number
   srcds: boolean; degraded?: boolean
@@ -62,6 +64,17 @@ export interface WorkshopSearch { items: WorkshopItem[]; total: number; page: nu
 
 export interface PluginsResponse { enabled: { file: string; protected: boolean }[]; disabled: { file: string }[]; raw: string }
 
+export interface PluginPack {
+  id: string; name: string; summary: string; version: string; visible: boolean; required: boolean; default: boolean
+  requires: string[]; conflicts: string[]; provides: string[]; available: boolean; installed: boolean
+  state: 'not_installed' | 'restart_required' | 'active' | 'unknown' | 'incomplete'
+  runtime: 'active' | 'missing' | 'unknown'
+}
+export interface PluginPackStatus {
+  schema: 1; packs: PluginPack[]; profiles: Record<string, string[]>; game_installed: boolean
+  pending: { id: string; phase: string; errors: string[] } | null; job: Job | null
+}
+
 export interface PluginConfigFile { name: string; source: 'header' | 'filename' }
 export interface PluginParameter {
   name: string; value: string; default: string | null; min: string | null; max: string | null
@@ -90,3 +103,38 @@ export interface Account {
 export interface PerfRow { t: string; humans: number; cpu: number; out_kb: number; fps: number }
 
 export interface Out { out: string }
+
+export type PanelValue = string | number | boolean
+export interface PanelField {
+  value?: PanelValue; set?: boolean; effect: 'live' | 'restart'; editable: boolean; locked_reason: string
+}
+export interface PanelConfiguration {
+  fields: Record<string, PanelField>; revision: string; applied_revision: string; config_path: string
+  supervised: boolean; boot: string; restart_pending: boolean
+}
+export interface PanelConfigResult {
+  saved: boolean; revision: string; changed: string[]; restart_scheduled: boolean; boot: string; backup: string | null
+  next_listener: { bind: string; port: number; tls: boolean }
+}
+export type SetupStep = 'panel' | 'game' | 'packs' | 'settings' | 'join'
+export interface Onboarding {
+  complete: boolean; step: SetupStep; draft: Record<string, unknown>
+  checks: Record<SetupStep, { ready: boolean; reason: string }>; missing: SetupStep[]; public_access: 'unverified'
+}
+
+export interface BasicValues {
+  revision: string; server_name: string; ascii_fallback: string; hostname_file: boolean
+  password_set: boolean; region: number; coop_players: number; game_mode: string; pending: boolean
+}
+export interface BasicOverview {
+  game_installed: boolean; config_error: string; multiplayer_available: boolean; engine_capacity: number
+  fields: BasicValues | null; restart_required: boolean; display_host: string; game_port: number
+}
+export interface BasicFieldResult {
+  saved?: boolean; state: 'saved' | 'applied' | 'verified' | 'unverified' | 'error' | 'restart_required'
+  message?: string; value?: string | null; actual?: string | null; values?: Record<string, string | null>
+}
+export interface BasicResult {
+  revision: string; changed: boolean; saved: boolean; restart_required: boolean
+  fields: Record<string, BasicFieldResult>
+}

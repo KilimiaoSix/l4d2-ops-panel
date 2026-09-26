@@ -26,6 +26,8 @@ class AccountService:
         except ValueError as e: raise ApiError(400, str(e))
 
     def sync_admins(self) -> str:
+        if not self.paths.sm_plugins.is_dir():
+            return '账号已保存；安装游戏及 SourceMod 后可同步游戏管理员'
         rows = [(r['id'], r['username'], r['steamid'], r['flags']) for r in self.accounts.with_steamid()]
         write_admins_block(self.paths.admins_ini, rows)
         try: return self.rcon.run('sm_reloadadmins') or 'admin cache reloaded'
