@@ -8,7 +8,9 @@ Left 4 Dead 2 专用服务器的 Web 运维面板。**FastAPI 后端 + Vue 3 前
 
 ## 新手开服入口（候选验证中）
 
-新安装流程面向 **Ubuntu 22.04 / 24.04、x86_64、systemd**：签名安装包自动准备 Docker、Compose、专用服务用户、Python 环境和 HTTPS 面板，随后在网页“开服向导”中完成游戏安装、插件选择、基础设置和加入说明。服务器不需要 Node.js。安装脚本、压缩包和签名由本仓库 **GitHub Releases** 托管，无需另外提供下载服务器；网络不通时支持显式镜像或完整签名包的离线安装。当前尚未公开发布签名安装入口；源码里的 `get.sh.in` 是生成模板，不能直接执行。已有 LinuxGSM 服务器继续使用下方高级安装路径，安装器不会接管同名旧服务或游戏目录。
+新安装流程面向 **Ubuntu 22.04 / 24.04、x86_64、systemd**：签名安装包自动准备 Docker、Compose、专用服务用户、Python 环境和 HTTPS 面板，随后在网页“开服向导”中完成游戏安装、插件选择、基础设置和加入说明。服务器不需要 Node.js。安装脚本、压缩包和签名由本仓库 **GitHub Releases** 托管，无需另外提供下载服务器；网络不通时支持显式镜像或完整签名包的离线安装。
+
+现可使用 [2.1.0-candidate.11 测试预览版](https://github.com/KilimiaoSix/l4d2-ops-panel/releases/tag/v2.1.0-candidate.11)，Release 页面提供固定版本安装命令和脚本 SHA256。该预览使用正式发布密钥签名；真人密码、第五名玩家、8/12 人满员与重连仍待验收，尚未发布稳定版本。请下载 Release 资产，源码里的 `get.sh.in` 和 GitHub 自动生成的 Source code 压缩包不能直接安装。已有 LinuxGSM 服务器继续使用下方高级安装路径，安装器不会接管同名旧服务或游戏目录。
 
 拿到正式签名发布包后，运行其中的 `sudo bash get.sh --offline-dir <发布包目录> --host <域名或IP>`；在线安装使用同一份受信任 `get.sh`，无需 `--offline-dir`。安装完成会输出随机初始账号密码、面板地址与证书指纹。核对证书后登录，不必提前创建游戏目录。发布来源与签名说明见 [release-signing.md](docs/release-signing.md)，当前实测范围见 [实施验收记录](docs/10-reports/2026-09-27/beginner-delivery-status.md)。
 

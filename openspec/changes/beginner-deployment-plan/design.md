@@ -219,7 +219,7 @@ server.cfg、名称文件以及多人包配置需要一个可恢复的多文件�
 
 测试夹具具体改动：进程内 app fixture 写真实 panel.json 并传 conf；FakeInstaller 注入只在进程内测；子进程重启 helper 重读 port/TLS/base_url、追加日志和关闭旧句柄；FakeGame 支持普通与 sm_cvar 的引号/空值赋值、protected 拒读、未知 cvar、hostname ASCII报告以及多人 profile。401 测试必须证明真实路由已注册，并同时有合法请求成功用例，不能依赖 catch-all 的 401。
 
-开发顺序：P0 → M1配置/发布底座 → M2与M3服务 → 完整向导和加入页 → V1–V8整体验收。M1单独交付须标明只有面板引导底座。所有源码实现完成并通过真实验收后才打对外版本；此规划 change 在实现前保持活动，不归档。
+开发顺序：P0 → M1配置/发布底座 → M2与M3服务 → 完整向导和加入页 → V1–V8整体验收。M1单独交付须标明只有面板引导底座。可公开发布明确标为 prerelease 的签名候选用于真实下载验收；稳定版本须等全部验收完成。当前 candidate.11 已公开，真人验收尚缺，change 保持活动，不归档。
 
 ## Risks / Trade-offs
 

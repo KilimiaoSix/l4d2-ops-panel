@@ -169,7 +169,7 @@ python tools/testing/bootstrap_vm_control.py probe --codename jammy --version 2.
 python tools/testing/bootstrap_vm.py stop --codename jammy
 ```
 
-`.github/workflows/ci.yml` 配置 Python 3.10.20/3.12.13 回归、固定 Node 构建，以及完整 tar 构建/临时测试密钥签名/实际插件载荷检查；CI 不依赖正式发布密钥，也不上传测试签名工件。`release.yml` 使用正式信任材料校验并上传候选工件，不自动公开发布。2026-09-27 已完成 CLI workflow 授权，`4064fee` 的 [GitHub run 36287241862](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36287241862) 四项检查全部通过。按用户最新要求，正式分发使用 GitHub Releases，`toolchain.json` 的 `mirror: null` 允许生成正式签名候选，无需游戏服务器提供下载。正式公钥和 main 限定的 release 环境 secret 已配置；代码进入 main 后仍需实跑正式签名，并验证实际 GitHub Release 资产下载。已完成的本机/服务器验证及未测项目以[交付状态](10-reports/2026-09-27/beginner-delivery-status.md)为准。
+`.github/workflows/ci.yml` 配置 Python 3.10.20/3.12.13 回归、固定 Node 构建，以及完整 tar 构建/临时测试密钥签名/实际插件载荷检查；CI 不依赖正式发布密钥，也不上传测试签名工件。`release.yml` 使用正式信任材料校验并上传候选工件，不自动公开发布。2026-09-27 已完成 CLI workflow 授权；main 的提交 `26dcd33` 在 [run 36288551619](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36288551619) 四项通过，两套 Python 各 528 项。随后 [run 36288569886](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36288569886) 使用 release 环境 secret 完成正式密钥签名，独立验签后发布 candidate.11 测试预览版。Ubuntu 22.04/24.04 已从公开 GitHub 地址完成在线安装和登录检查。`toolchain.json` 的 `mirror: null` 是受支持默认值，无需游戏服务器提供下载。用户已合并 PR #1，并授权后续直接合入 main，无需新 PR。完整验证范围及真人未测项目以[交付状态](10-reports/2026-09-27/beginner-delivery-status.md)为准。
 
 `tools/testing/onboarding_recovery_smoke.py --release-panel <已验证解包目录>/panel --official-cache <固定官方下载包.zip>` 使用实际 HTTP、新进程、Docker 和候选插件载荷测试下载断线后的向导恢复。需先准备 `python:3.12-slim` 镜像和开发依赖；游戏是协议夹具，下载失败后的重试改用本地缓存镜像，不验证外部镜像可用性。所有容器使用唯一项目和 localhost 端口，结束后只清理自己创建的容器/镜像，证据目录保留。
 

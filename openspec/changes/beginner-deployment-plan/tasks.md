@@ -2,14 +2,14 @@
 
 本清单已于 2026-09-27 进入用户授权的实施阶段，**不因规划完成而勾选**。先读 design.md；每项完成需同时提交代码、对应测试及结果。`R/O/C/P/B` 对应 specs 内的 Requirement 编号，`V0–V8` 对应设计验证矩阵。安装测试允许本机 Docker，或服务器上的独立容器、目录和端口；不得把现有游戏服当成干净安装目标。
 
-2026-09-27 实测证据集中于 [交付状态及验收证据](../../../docs/10-reports/2026-09-27/beginner-delivery-status.md)。1.3 的容量 profile 已经真实引擎验证；第五名真人与满员可玩性仍属于未完成的 7.3。3.2 已在 GitHub 提交 `4064fee` 的 [run 36287241862](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36287241862) 通过全部四项检查：Python 3.10.20/3.12.13 各 527 项、前端构建、完整 tar 构建/临时签名/实际安装。正式环境 secret 的签名实跑仍待镜像和发布条件落实。7.1 的断线和新进程恢复以真实 HTTP/Docker 协议夹具验证，首次最小/首次全套均走到完成和重开；真实游戏引擎另有独立验收，二者不混称真人可玩性。
+2026-09-27 实测证据集中于 [交付状态及验收证据](../../../docs/10-reports/2026-09-27/beginner-delivery-status.md)。main 提交 `26dcd33` 的 [CI](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36288551619) 四项通过：Python 3.10.20/3.12.13 各 528 项、前端构建、完整 tar/临时签名/实际安装。正式密钥[签名构建](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36288569886) 和独立验签通过，candidate.11 已公开于 GitHub。7.2 的 candidate.10 已执行 V1–V6 回归；candidate.11 补充真实 GitHub 无镜像双 Ubuntu 首装、实际 tar 安装和真实引擎 29 项复测。安装器代码不变，后端 Python AST 差异只有构建版本；旧故障/浏览器证据保留原版本标识。1.3 的容量 profile 已经真实引擎验证；7.1 的断线恢复采用真实 HTTP/进程/Docker 协议夹具。二者均不代替 7.3 的第五名真人与满员游玩验收。
 
 ## 1. P0：跨里程碑契约与基线
 
 - [x] 1.1 保留并核对现有 README/Steam 未提交改动；在 Linux 建隔离开发环境，运行现有 pytest 与前端构建，记录原始失败；确认 FastAPI/uvicorn/Vite 实际锁定版本（V8）。
 - [x] 1.2 创建 `panel/packs/manifest.json` 的 schema、真实依赖/冲突与文件策略；确定唯一 `packs/payloads` 路径、收据与事务版本格式，提供同一清单消费测试（R1/P1）。
 - [x] 1.3 在 `tools/release/upstreams.json` 固定 Metamod/SourceMod、l4dtoolz、生还者管理、Infected Bots、Points 及依赖的 URL/commit/哈希/架构/许可；区分编译与运行依赖，验证多人生还者+特感容量 profile；没有可再分发材料的包不得算全套完成（R1/P1/B3）。
-- [ ] 1.4 锁定 Python 直接/间接依赖和 CI Node/Python；确定真实 GitHub Releases 入口、签名格式、公钥轮换与发布 secret；记录 get.sh 初始信任、GitHub 下载与可选镜像/离线获取方式；实跑正式签名（R1/R2，按用户 2026-09-27 指示不使用服务器提供资源）。
+- [x] 1.4 锁定 Python 直接/间接依赖和 CI Node/Python；确定真实 GitHub Releases 入口、签名格式、公钥轮换与发布 secret；记录 get.sh 初始信任、GitHub 下载与可选镜像/离线获取方式；实跑正式签名（R1/R2，按用户 2026-09-27 指示不使用服务器提供资源）。
 - [x] 1.5 先写 API/type 契约和测试表：配置字段生效表、向导状态、插件收据、基础设置结果、错误状态及角色权限；更新本 change 与现有开发文档（O1/C1/P1/B1）。
 
 ## 2. M1a：配置、状态与恢复底座
@@ -60,7 +60,7 @@
 ## 7. E：完整闭环与交付
 
 - [x] 7.1 把游戏、插件、基础设置、必要重启、加入说明接入向导；测试首次最小、首次全套、后续补全、中途断网/刷新/面板重启与重试（O1/O2/P4）。
-- [ ] 7.2 用发布候选tar在干净Ubuntu复跑V1–V6；核实脚本及签名资产可从真实 GitHub Releases 固定版本获取，无镜像配置可安装；可选坏镜像/坏签名失败且不修改原安装（R2/V2）。
+- [x] 7.2 用发布候选tar在干净Ubuntu复跑V1–V6；核实脚本及签名资产可从真实 GitHub Releases 固定版本获取，无镜像配置可安装；可选坏镜像/坏签名失败且不修改原安装（R2/V2）。
 - [ ] 7.3 用真实外部游戏客户端验证进服密码/错密码/清除密码、中文服名、4/8/12人（含第五人生还者）、换图、掉线重连、所选特感预算；记录确切版本和组合，未测项不宣称兼容（V7/B1/B2/B3）。
 - [x] 7.4 全量pytest、前端构建、Docker smoke与旧LinuxGSM兼容回归；更新测试fixture的所有精确features字典和真实路由鉴权用例（V8）。
 - [x] 7.5 README改为新手入口与高级路径；development更新架构/API/发布；提供证书、网络、插件来源、数据保留、恢复说明，逐需求填写证据矩阵并执行OpenSpec strict（R6/V0–V8）。

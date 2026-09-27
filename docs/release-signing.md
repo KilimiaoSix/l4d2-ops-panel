@@ -1,6 +1,6 @@
 # 发布签名与工具链（实施中）
 
-版本化安装脚本由 `tools/release/render_bootstrap.py` 从 `get.sh.in` 生成，内嵌受信任公钥和固定版本。源码模板不能直接当作安装脚本执行。工具链版本记录在 `tools/release/toolchain.json`。按用户 2026-09-27 的决定，发布资源由本仓库 GitHub Releases 托管，不使用游戏服务器提供下载。`mirror: null` 是默认且可用的配置；正式公钥和 GitHub 环境 secret 已配置，正式签名工作流及公开下载仍待实测，不能宣布公开发布完成。
+版本化安装脚本由 `tools/release/render_bootstrap.py` 从 `get.sh.in` 生成，内嵌受信任公钥和固定版本。源码模板不能直接当作安装脚本执行。工具链版本记录在 `tools/release/toolchain.json`。按用户 2026-09-27 的决定，发布资源由本仓库 GitHub Releases 托管，不使用游戏服务器提供下载。`mirror: null` 是默认且可用的配置。[2.1.0-candidate.11 测试预览](https://github.com/KilimiaoSix/l4d2-ops-panel/releases/tag/v2.1.0-candidate.11) 已由 main 上的正式签名工作流生成、在本机独立验签并公开上传五个资产；稳定版本仍需真人验收后发布。
 
 每个版本的 Release 上传五个独立资产：`get.sh`、`l4d2-panel-linux-x86_64.tar.gz`、`VERSION`、`SHA256SUMS`、`SHA256SUMS.sig`。脚本使用本仓库的 `/releases/download/v<版本>/` 路径取得同一版本的资产；GitHub 自动生成的 Source code 压缩包不含构建产物，不能作为安装包。GitHub 支持将构建好的软件附加为 [Release 资产](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)。
 
@@ -10,7 +10,9 @@
 
 正式公钥为 `tools/release/release-public.pem`，2026-09-27 生成的独立 RSA-3072 公钥 SPKI DER SHA256 指纹为 `0e29c5f28d26e1e71b12d7b4d8c49e4d4374efc3d079b4fe16943b3169ea353d`。本地 challenge 签名/验签成功；它与此前 VM 验收的临时测试密钥不同。私钥通过 GitHub CLI 在本机加密后保存为仓库 `KilimiaoSix/l4d2-ops-panel` 的 `release` 环境 secret `RELEASE_SIGNING_PRIVATE_KEY`，环境部署策略只允许 `main` 分支。普通分支 CI 使用临时测试密钥。
 
-私钥主副本保存在本机 WSL `Ubuntu-22.04` 的 `/var/lib/l4d2-release-signing/release-private.pem`（root，目录 0700、文件 0600），不能随测试 VM 或开发目录清理。GitHub secret 不能取回原文，维护者备份应使用其受控的加密存储。公钥与环境配置证据见 [签名准备记录](10-reports/2026-09-27/release-signing-provisioning.json)；该记录不含私钥。CLI workflow 授权和普通 CI 已通过；代码进入主分支后可运行正式签名工作流，不再要求配置独立镜像。候选工件验证通过后才创建对应 GitHub Release，并回读下载验证；Actions 临时工件不能当作长期公开安装入口。
+私钥主副本保存在本机 WSL `Ubuntu-22.04` 的 `/var/lib/l4d2-release-signing/release-private.pem`（root，目录 0700、文件 0600），不能随测试 VM 或开发目录清理。GitHub secret 不能取回原文，维护者备份应使用其受控的加密存储。公钥与环境配置证据见 [签名记录](10-reports/2026-09-27/release-signing-provisioning.json)；该记录不含私钥。main 的 [正式签名运行](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36288569886) 已通过，下载工件后重新验签，并核对 GitHub 上传后的五个资产 SHA256 一致，才发布测试预览。Actions 临时工件不作为长期公开安装入口。
+
+候选版本的 `get.sh` SHA256 为 `1a5413757db25f03b33e102bfefe24c0d5ea7d5154cf88c85697e1051ad4224d`，安装包 SHA256 为 `a840bc74360023c30cafd70913b26925ac59163b70b641c9f672e56dae80b0a1`，源码提交为 `26dcd339500d9ca9a278134834e764eba5e2a3a6`。两套全新 Ubuntu 22.04/24.04 已从真实 GitHub 地址完成默认无镜像安装、验签和 HTTPS 登录验证，见[安装记录](10-reports/2026-09-27/github-candidate11-installation.json)。本地安装使用现有 HTTP 代理；既有服务器另以无代理方式下载公开脚本并核对哈希成功，未执行生产安装。
 
 公钥轮换需维护者通过原有受信任入口分发新指纹和过渡脚本；镜像不能自行更换信任根。安装者对第一份 get.sh 的信任来自文档 HTTPS 入口及独立公布的脚本哈希，内嵌公钥不证明脚本自身可信。
 

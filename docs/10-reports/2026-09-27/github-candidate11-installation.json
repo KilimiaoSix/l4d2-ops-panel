@@ -1,0 +1,40 @@
+{
+  "version": "2.1.0-candidate.11",
+  "source_commit": "26dcd339500d9ca9a278134834e764eba5e2a3a6",
+  "release_url": "https://github.com/KilimiaoSix/l4d2-ops-panel/releases/tag/v2.1.0-candidate.11",
+  "default_source": "GitHub Releases",
+  "mirror": null,
+  "offline_dir": null,
+  "local_network": "Existing Windows HTTP proxy forwarded to guest loopback over SSH; not a direct-network test",
+  "existing_server_direct_get_sh_download": "HTTP 200 and matching SHA256; script not executed on production",
+  "systems": {
+    "jammy": {
+      "exit_code": 0,
+      "version": "2.1.0-candidate.11",
+      "non_root": true,
+      "https_login": true,
+      "systemd_pid_matches_http": true,
+      "initial_owner_count": 1,
+      "database_integrity": "ok",
+      "game_dir_absent": true,
+      "config_and_key_mode": "0600",
+      "docker": "29.8.1",
+      "compose": "5.5.1",
+      "helpers": true
+    },
+    "noble": {
+      "exit_code": 0,
+      "version": "2.1.0-candidate.11",
+      "non_root": true,
+      "https_login": true,
+      "systemd_pid_matches_http": true,
+      "initial_owner_count": 1,
+      "database_integrity": "ok",
+      "game_dir_absent": true,
+      "config_and_key_mode": "0600",
+      "docker": "29.8.1",
+      "compose": "5.5.1",
+      "helpers": true
+    }
+  }
+}

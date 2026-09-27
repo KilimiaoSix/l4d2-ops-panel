@@ -1,6 +1,6 @@
 # L4D2 Ops Panel 工程上下文
 
-当前代码基线为 `b73ef2a`，后端 FastAPI + Python，前端 Vue 3 + TypeScript。现有分层、接口契约和测试约定以 `docs/development.md` 为准；引擎实测限制见 `docs/l4d2-server-notes.md`。
+本轮实施起始代码基线为 `b73ef2a`，后端 FastAPI + Python，前端 Vue 3 + TypeScript。现有分层、接口契约和测试约定以 `docs/development.md` 为准；引擎实测限制见 `docs/l4d2-server-notes.md`。
 
 - `api` 负责 HTTP、输入模型和鉴权；`services` 负责业务流程与审计；`integrations` 负责文件、协议和外部进程；`store` 负责 SQLite。
 - 写操作在服务层审计，秘密不进入审计、任务日志或普通查询响应。前端不使用 `v-html`。

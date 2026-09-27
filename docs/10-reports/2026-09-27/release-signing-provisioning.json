@@ -15,5 +15,9 @@
       "updatedAt": "2026-09-26T21:57:38Z"
     }
   ],
-  "workflow_run_verified": false
+  "workflow_run_verified": true,
+  "signing_workflow_run": "https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36288569886",
+  "signed_candidate_version": "2.1.0-candidate.11",
+  "independent_artifact_verification": true,
+  "prerelease_url": "https://github.com/KilimiaoSix/l4d2-ops-panel/releases/tag/v2.1.0-candidate.11"
 }

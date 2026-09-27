@@ -1,6 +1,6 @@
 # 面板新手化改造开发计划
 
-日期：2026-09-27。状态：**实现和 CI 已完成主体验证；正式签名、公开下载与真人客户端验收仍待完成**。最新范围与证据见 [交付状态](10-reports/2026-09-27/beginner-delivery-status.md)。
+日期：2026-09-27。状态：**正式密钥签名的 GitHub 测试预览版已发布，Ubuntu 22.04/24.04 在线安装已通过；真人客户端验收仍待完成**。最新范围与证据见 [交付状态](10-reports/2026-09-27/beginner-delivery-status.md)。
 
 这是对 Claude 会话 `0e1ac5e8-6eeb-482c-af37-bb9d27c1b6e7` 的接续。原会话最后的明确请求是“我赞同你的优化方案，请你开始制定下开发计划”。本文件是阅读入口；[详细设计](../openspec/changes/beginner-deployment-plan/design.md)、[开发清单](../openspec/changes/beginner-deployment-plan/tasks.md)和 [需求规格](../openspec/changes/beginner-deployment-plan/specs/)是实施依据。
 
