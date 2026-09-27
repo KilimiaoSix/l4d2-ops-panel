@@ -2,6 +2,8 @@
 
 活动任务：`beginner-deployment-plan` 7.3 / 7.3a；需求 B2/B5/O4。2026-09-27，游戏版本 2.2.4.3 build 10097。公开 candidate.11 不包含本修复。
 
+修复已随 [candidate.12](https://github.com/KilimiaoSix/l4d2-ops-panel/releases/tag/v2.1.0-candidate.12) 发布，源码 `49ea5f1`。[CI](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36316205655) Python 3.10/3.12 各 530 项、前端和最终包安装通过；[正式签名构建](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36316206084)及独立验签通过。GitHub 正式 tar SHA256 `d119964dfc72d7340f7787cfccfe6d1824c5b2b72825979e05f25da7259141cc` 已复跑下述实服 42 项，全部通过；上传五个资产的 digest 与本地验签文件一致，公开 get.sh 匿名下载哈希也一致。
+
 ## 故障证据
 
 云侧放行后，公网 UDP 已进入测试容器并被 srcds 进程接收，但原生非空 `sv_password` 导致查询无回复，客户端密码窗口输入后无进展。四组对照中，原 SDK 与镜像 SteamCMD SDK 均在密码非空时查询失败、密码为空时成功，因此排除 SDK 更换方案。Valve 的[问题记录 #3416](https://github.com/ValveSoftware/Source-1-Games/issues/3416)描述了相同密码窗口现象。
@@ -27,4 +29,4 @@
 
 真实回归发现空服休眠会延后配置完成回调：换图及空密码首次启动可能一直停留在未就绪。最终插件在加载时读取当前变量，以钩子处理后续密码赋值；不再将首次初始化或换图就绪依赖该回调。上述 42 项使用修正后的实际 tar，先前失败结果不计为通过。
 
-第五名真人、8/12 人满员、多人重连和实际游玩尚未验证。正确密码与错误密码测试使用手动加载工作版插件，不能标为尚未发布的候选包实测。
+第五名真人、8/12 人满员、多人重连和实际游玩尚未验证。正确密码与错误密码的真人测试使用早先手动加载工作版插件，不将它们改写为最终签名包的真人验收。

@@ -6,6 +6,8 @@
 
 ## 1. P0：跨里程碑契约与基线
 
+后续增量：`49ea5f1` 的 CI（Python 3.10/3.12 各 530 项）、正式签名及实际签名 tar 实服 42 项通过，candidate.12 已发布。工作版已有单名真人正确密码进入、错误密码拒绝证据；空/清除密码真人行为、暂停运行及多人满员仍缺证据，因此 7.3/7.3a/7.6 继续保持未完成。
+
 - [x] 1.1 保留并核对现有 README/Steam 未提交改动；在 Linux 建隔离开发环境，运行现有 pytest 与前端构建，记录原始失败；确认 FastAPI/uvicorn/Vite 实际锁定版本（V8）。
 - [x] 1.2 创建 `panel/packs/manifest.json` 的 schema、真实依赖/冲突与文件策略；确定唯一 `packs/payloads` 路径、收据与事务版本格式，提供同一清单消费测试（R1/P1）。
 - [x] 1.3 在 `tools/release/upstreams.json` 固定 Metamod/SourceMod、l4dtoolz、生还者管理、Infected Bots、Points 及依赖的 URL/commit/哈希/架构/许可；区分编译与运行依赖，验证多人生还者+特感容量 profile；没有可再分发材料的包不得算全套完成（R1/P1/B3）。

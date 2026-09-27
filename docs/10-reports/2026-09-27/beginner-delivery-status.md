@@ -1,6 +1,6 @@
 # 新手安装与使用优化交付状态
 
-已发布 [2.1.0-candidate.11 测试预览版](https://github.com/KilimiaoSix/l4d2-ops-panel/releases/tag/v2.1.0-candidate.11)，源码为 `26dcd339500d9ca9a278134834e764eba5e2a3a6`。2026-09-27 用户确认发布资源使用 GitHub，不使用游戏服务器提供下载；独立镜像为可选。稳定版本仍需真人客户端验收。
+已发布 [2.1.0-candidate.12 测试预览版](https://github.com/KilimiaoSix/l4d2-ops-panel/releases/tag/v2.1.0-candidate.12)，源码为 `49ea5f11306c4bcb348382ce2ee5862b0c6a5b51`，增加原生进服密码兼容修复。2026-09-27 用户确认发布资源使用 GitHub，不使用游戏服务器提供下载；独立镜像为可选。稳定版本仍需剩余真人客户端验收。下表保留旧候选证据的版本范围。
 
 ## 实现范围
 
@@ -14,6 +14,8 @@
 
 | 范围 | 结果与证据 |
 |---|---|
+| candidate.12 CI 与签名 | [CI 36316205655](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36316205655) 四项通过，Python 3.10/3.12 各 530 项；[正式签名 36316206084](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36316206084) 成功，下载后独立验签、五个公开资产 digest 核对和匿名 get.sh 下载哈希通过 |
+| candidate.12 实际包实服 | GitHub 正式签名 tar 在独立服务器通过真实 HTTP/RCON/UDP 42 项，涵盖升级保留配置、密码初始状态/设置/清除、卸载保护/晚加载、4/8/12 参数重启、空服换图及清除后重启，无插件运行错误；详见[密码修复记录](join-password-fix.md) |
 | GitHub CI | 提交 `26dcd33` 的 [run 36288551619](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36288551619) 四项全部通过：Python 3.10.20/3.12.13 各 528 项、Node 22.22.0 前端构建、完整包构建/临时签名/最终 tar 安装 11 项 |
 | 正式密钥签名及公开下载 | [run 36288569886](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36288569886) 使用 main 限定的 release secret 成功签名；下载工件独立验签，五个 Release 资产的 GitHub digest 与本地逐一一致 |
 | GitHub 默认安装 | 两套全新 Ubuntu 22.04/24.04 systemd VM 从公开 GitHub 下载 get.sh 及包，无 mirror/offline 参数，验签及安装均退出 0；HTTPS 登录、非 root UID、systemd/HTTP PID、唯一 owner、数据库、0600 权限、Docker 29.8.1/Compose 5.5.1 均通过，见[安装记录](github-candidate11-installation.json) |
@@ -31,9 +33,9 @@ candidate.10 已完成 V1–V6 的故障、配置、向导和浏览器回归。�
 
 ## 尚未完成
 
-已在独立测试服定位原生密码兼容问题并验证工作版修复：正确密码进入并能控制角色，错误密码被拒绝，公网 UDP 查询恢复。细节及证据边界见[进服密码修复记录](join-password-fix.md)。candidate.11 不包含该修复，新候选尚未发布。
+已在独立测试服定位原生密码兼容问题并验证工作版修复：正确密码进入并能控制角色，错误密码被拒绝，公网 UDP 查询恢复。细节及证据边界见[进服密码修复记录](join-password-fix.md)。修复已随 candidate.12 发布，candidate.11 不包含该修复。安装器、网络/恢复 helper 及 Python 运行依赖文件与 candidate.11 逐字节一致，双 Ubuntu 安装证据继续明确标为 candidate.11。
 
-1. 完成新密码插件最终候选的清除密码、生命周期回归，以及第五名真人、8/12 人满员、重连和实际游玩。
+1. 补齐空/清除密码真人测试、插件暂停运行验证，以及第五名真人、8/12 人满员、重连和实际游玩。服务端清除密码与重启/换图已通过。
 2. 满足剩余验收与发布授权后才发布稳定版本、进行生产切换和归档 OpenSpec。
 
 测试预览版不表示上述两项已经完成。既有生产面板与游戏服务未因本次源码发布而切换。
