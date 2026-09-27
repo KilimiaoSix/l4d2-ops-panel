@@ -1,35 +1,24 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { logout } from '../api/endpoints'
 import { usePolling } from '../composables/usePolling'
-import { toast } from '../composables/useToast'
 import { VIEWS } from '../router'
 import { session } from '../stores/session'
 import Mark from './Mark.vue'
+import JoinServerCard from './JoinServerCard.vue'
 
 const route = useRoute(), router = useRouter()
 const current = computed(() => VIEWS.find(v => v.name === route.name) ?? VIEWS[0]!)
 const st = computed(() => session.status)
+const gameMissing = computed(() => st.value?.game_installed === false && !['accounts', 'panel', 'server', 'setup'].includes(String(route.name)))
+onMounted(() => { if (session.role === 'owner' && st.value?.onboarding_complete === false) void router.replace('/setup') })
 const pillText = computed(() => st.value?.online ? '在线' : (st.value?.srcds ? '进程在，游戏未响应' : '离线'))
 const pillClass = computed(() => st.value ? (st.value.online ? 'on' : 'off') : '')
 // page footer vitals (the 服务器 page shows the detailed version of the same numbers)
 const load1 = computed(() => st.value?.sys.load?.split(' ')[0] || '-')
 const memPct = computed(() => st.value?.sys.mem_total_mb ? Math.round(100 * (st.value.sys.mem_used_mb || 0) / st.value.sys.mem_total_mb) + '%' : '-')
 const proc = computed(() => st.value ? (st.value.srcds ? '运行中' : '未运行') : '-')
-const connect = computed(() => st.value?.display_host ? 'connect ' + st.value.display_host : '')
-
-async function copyConnect() {
-  const t = connect.value
-  try {
-    if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(t)
-    else {   // plain http on a LAN: the clipboard API is unavailable, fall back to the legacy command
-      const ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;opacity:0'
-      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove()
-    }
-    toast('已复制：' + t)
-  } catch { toast('复制失败，请手动选中文本复制', true) }
-}
 
 usePolling(() => session.refreshStatus(), 10000)
 usePolling(() => session.refreshPlayers(), 30000)
@@ -82,9 +71,13 @@ async function doLogout() {
             <button class="g sm" @click="doLogout">退出</button>
           </div>
         </header>
-        <RouterView :key="String(route.name)" />
+        <section v-if="gameMissing" class="view on"><div class="card">
+          <h2>先安装游戏</h2><p>当前还没有游戏文件。安装完成后，这里会显示{{ current.title }}。</p>
+          <button @click="router.push('/server')">前往安装游戏</button><button class="g" @click="router.push('/setup')">继续开服向导</button>
+        </div></section>
+        <RouterView v-else :key="String(route.name)" />
         <footer id="pfoot">
-          <div v-if="connect" id="f-conn" class="fs"><span class="k">连接地址</span><code>{{ connect }}</code><button class="g sm" @click="copyConnect">复制</button></div>
+          <JoinServerCard compact />
           <span class="sp" />
           <div class="fs"><span class="k">负载</span><b>{{ load1 }}</b></div>
           <div class="fs"><span class="k">内存</span><b>{{ memPct }}</b></div>

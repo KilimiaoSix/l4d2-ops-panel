@@ -1,6 +1,6 @@
 """Persist direct server.cfg mode commands without interpreting exec files or plugins.
 
-Only standalone mp_gamemode and sm_cvar mp_gamemode assignments are editable.
+Standalone assignments are shared with the small basic-settings allowlist.
 Ambiguous command syntax fails closed; unrelated bytes never need decoding.
 """
 from dataclasses import dataclass, field
@@ -16,11 +16,19 @@ from ..game_modes import MODE_IDS
 
 
 _MAX_BYTES = 1024 * 1024
-_WORD = re.compile(rb'\bmp_gamemode\b', re.I)
 _TOKENS = re.compile(rb'"(?:\\.|[^"\\])*"|;|[^\s;"]+')
-_ASSIGNMENT = re.compile(
-    rb'^[ \t]*(?P<prefix>sm_cvar[ \t]+)?(?P<command>mp_gamemode)[ \t]+'
-    rb'(?P<value>"[A-Za-z0-9_]+"|[A-Za-z0-9_]+)[ \t\r\n]*$', re.I)
+_SAFE_STRING = rb'"[\x20-\x21\x23-\x3a\x3c-\x5b\x5d-\x7e]*"|[\x21\x23-\x3a\x3c-\x5b\x5d-\x7e]+'
+_VALUES = {
+    'mp_gamemode': rb'"[A-Za-z0-9_]+"|[A-Za-z0-9_]+',
+    'hostname': _SAFE_STRING,
+    'sv_password': _SAFE_STRING,
+    'sv_region': rb'"[0-9]+"|[0-9]+',
+    'sv_maxplayers': rb'"-?[0-9]+"|-?[0-9]+',
+    'sv_force_unreserved': rb'"[01]"|[01]',
+    'sv_allow_lobby_connect_only': rb'"[01]"|[01]',
+    'l4d_multislots_max_survivors': rb'"[0-9]+"|[0-9]+',
+    'l4d_multislots_min_survivors': rb'"[0-9]+"|[0-9]+',
+}
 
 
 class ModeConfigError(Exception):
@@ -39,20 +47,25 @@ def _identity(info):
             info.st_ctime_ns, info.st_mode)
 
 
-def _contains_mode_command(code):
+def _contains_command(code, command):
     tokens = _TOKENS.findall(code)
     for i, token in enumerate(tokens):
         if i and tokens[i - 1] != b';':
             continue
         if token.strip(b'"').lower() == b'sm_cvar' and i + 1 < len(tokens):
             token = tokens[i + 1]
-        if token.strip(b'"').lower() == b'mp_gamemode':
+        if token.strip(b'"').lower() == command:
             return True
     return False
 
 
-def _assignments(data):
+def direct_assignments(data, command):
     """Return byte spans of direct assignments, retaining comments and formatting."""
+    if command not in _VALUES: raise ModeConfigError('不支持的直接配置指令')
+    key = command.encode('ascii')
+    word = re.compile(rb'\b' + key + rb'\b', re.I)
+    assignment = re.compile(rb'^[ \t]*(?P<prefix>sm_cvar[ \t]+)?(?P<command>' + key + rb')[ \t]+'
+                            rb'(?P<value>' + _VALUES[command] + rb')[ \t\r\n]*$', re.I)
     result = []
     offset = 0
     in_block = False
@@ -66,8 +79,8 @@ def _assignments(data):
             if in_block:
                 end = line.find(b'*/', i)
                 stop = len(line) if end < 0 else end + 2
-                if _WORD.search(line[i:stop]):
-                    raise ModeConfigError('server.cfg 含块注释中的 mp_gamemode，无法安全修改')
+                if word.search(line[i:stop]):
+                    raise ModeConfigError(f'配置含块注释中的 {command}，无法安全修改')
                 visible[i:stop] = b' ' * (stop - i)
                 i = stop
                 in_block = end < 0
@@ -82,10 +95,10 @@ def _assignments(data):
                 quoted = not quoted
             escaped = quoted and line[i] == 92 and not escaped
             i += 1
-        if _contains_mode_command(visible):
-            match = _ASSIGNMENT.fullmatch(visible)
+        if _contains_command(visible, key):
+            match = assignment.fullmatch(visible)
             if not match:
-                raise ModeConfigError('server.cfg 含复合或不明确的 mp_gamemode 指令，无法安全修改')
+                raise ModeConfigError(f'配置含复合或不明确的 {command} 指令，无法安全修改')
             start, end = match.span('value')
             value = match.group('value').strip(b'"').decode('ascii')
             result.append((offset + start, offset + end, value,
@@ -93,6 +106,29 @@ def _assignments(data):
         offset += len(line)
     if in_block:
         raise ModeConfigError('server.cfg 含未闭合块注释，无法安全修改')
+    return result
+
+
+def rewrite_direct(data, updates):
+    """Merge only known direct commands; preserve unrelated bytes and comments."""
+    if len(data) > _MAX_BYTES: raise ModeConfigError('配置超过 1 MiB')
+    replacements, additions = [], []
+    for command, value in updates.items():
+        if command not in _VALUES or not isinstance(value, str): raise ModeConfigError('不支持的直接配置指令')
+        try: quoted = b'"' + value.encode('ascii') + b'"'
+        except UnicodeEncodeError: raise ModeConfigError('引擎配置值必须为安全 ASCII') from None
+        if not re.fullmatch(_VALUES[command], quoted): raise ModeConfigError('引擎配置值包含不支持的字符')
+        assignments = direct_assignments(data, command)
+        if not assignments: additions.append(command.encode() + b' ' + quoted)
+        for start, end, old, _, _ in assignments:
+            if old != value: replacements.append((start, end, quoted))
+    result = data
+    for start, end, value in sorted(replacements, reverse=True): result = result[:start] + value + result[end:]
+    if additions:
+        newline = b'\r\n' if b'\r\n' in data else b'\n'
+        if result and not result.endswith((b'\r', b'\n')): result += newline
+        result += newline.join(additions) + newline
+    if len(result) > _MAX_BYTES: raise ModeConfigError('保存后配置将超过 1 MiB')
     return result
 
 
@@ -141,7 +177,7 @@ class ModeConfig:
     def read(self) -> str | None:
         """Last direct assignment only; exec files and runtime overrides are not read."""
         with SERVER_CFG_LOCK:
-            commands = _assignments(self._snapshot().data)
+            commands = direct_assignments(self._snapshot().data, 'mp_gamemode')
             return commands[-1][2] if commands else None
 
     def _replace(self, expected, data, permissions):
@@ -173,7 +209,7 @@ class ModeConfig:
             raise ModeConfigError('不支持的游戏模式')
         with SERVER_CFG_LOCK:
             original = self._snapshot()
-            commands = _assignments(original.data)
+            commands = direct_assignments(original.data, 'mp_gamemode')
             replacement = original.data
             for start, end, value, command_start, prefixed in reversed(commands):
                 if value != mode:

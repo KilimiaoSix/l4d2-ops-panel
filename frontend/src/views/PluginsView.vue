@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import PluginConfigPanel from '../components/PluginConfigPanel.vue'
+import PluginPackCard from '../components/PluginPackCard.vue'
 import { getPlugins, pluginAction, uploadSmx } from '../api/endpoints'
 import type { PluginsResponse } from '../api/types'
 import { short, toast } from '../composables/useToast'
@@ -36,7 +37,7 @@ async function uploadFile() {
 </script>
 
 <template>
-  <section class="view on"><div class="grid pg">
+  <section class="view on"><PluginPackCard /><div class="grid pg">
     <div class="card"><h2>插件列表<span class="sp" /><button class="g sm" @click="load">刷新</button></h2>
       <div>
         <div class="tw"><table>

@@ -30,6 +30,28 @@ _REQUIRED = ('steam.inf', 'gameinfo.txt', 'bin/server_srv.so')
 
 _START_SCRIPT_TEMPLATE = r'''#!/bin/sh
 set -eu
+# The image's root-owned Steam home is inaccessible to the panel service UID.
+# Steam must load its SDK before the engine starts (including an empty server).
+if [ -f /l4d2/bin/steamclient.so ]; then
+    mkdir -p "$HOME/.steam/sdk32"
+    ln -sf /l4d2/bin/steamclient.so "$HOME/.steam/sdk32/steamclient.so"
+fi
+# Read one fixed capacity profile without executing CFG or accepting shell input.
+# MaxClients includes survivors, infected bots and Tanks, not just human players.
+profile=/l4d2/left4dead2/cfg/panel-capacity.cfg
+if [ -f "$profile" ]; then
+    capacity=$(awk '
+        { sub(/\r$/, "") }
+        /^[ \t]*(\/\/.*)?\r?$/ { next }
+        $1 == "panel_capacity" && $2 == "31" && NF == 2 { count++; next }
+        { bad = 1 }
+        END { if (bad || count != 1) exit 1; print 31 }
+    ' "$profile") || { echo "Invalid panel capacity profile" >&2; exit 78; }
+    if [ ! -f /l4d2/left4dead2/addons/l4dtoolz.so ]; then
+        echo "Panel capacity profile requires L4DToolZ" >&2; exit 78
+    fi
+    set -- "$@" +sv_setmax "$capacity" -maxplayers "$capacity"
+fi
 # Select a compatible initial map without changing the saved server configuration.
 mode=$(awk '
 BEGIN { mode = "coop"; block = 0 }
@@ -114,7 +136,9 @@ def render_compose(options: InstallOptions, game_dir: Path, mirror: str = DEFAUL
         'platform': 'linux/amd64',
         'user': f'{os.getuid()}:{os.getgid()}',
         'working_dir': '/l4d2',
-        'environment': {'HOME': '/tmp'},
+        # Without this, a service UID cannot create /l4d2/steam_appid.txt and
+        # the engine falls back to its obsolete Steam directory lookup.
+        'environment': {'HOME': '/tmp/l4d2-panel', 'SteamAppId': '550'},
         'entrypoint': ['/bin/sh', '/l4d2/left4dead2/.l4d2-panel-start.sh'],
         'command': command,
         'restart': 'unless-stopped',

@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "node": "22.22.0",
+  "python_build": "3.12.13",
+  "python_test": ["3.10.20", "3.12.13"],
+  "signature": "RSA-3072-PKCS1v1.5-SHA256",
+  "primary": "https://github.com/KilimiaoSix/l4d2-ops-panel/releases/download",
+  "mirror": null,
+  "public_key": "tools/release/release-public.pem"
+}

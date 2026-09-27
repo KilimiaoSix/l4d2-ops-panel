@@ -51,6 +51,8 @@ class GameDir:
         self.whitelist.write_text('STEAM_1:0:111 // alice\n// a comment line\n\nSTEAM_1:1:222\n', encoding='utf-8')
         self.admins.write_text('// SourceMod admins\n"STEAM_1:0:999" "99:z" // existing admin\n', encoding='utf-8')
         (self.logs / 'errors_20260922.log').write_text('\n'.join(ERROR_LINES) + '\n', encoding='utf-8')
+        ib = self.sm / 'data' / 'l4dinfectedbots'; ib.mkdir(parents=True)
+        for name in ('coop', 'te8', 'te12', 'te16'): (ib / (name + '.cfg')).write_text('"1" { "max_specials" "4" }\n')
 
     def addon_names(self):
         return sorted(p.name for p in self.addons.iterdir() if p.name.lower().endswith('.vpk'))
@@ -100,8 +102,11 @@ class Panel:
         self.log_path = self.dir / 'panel.log'; self.proc = None
 
     def start(self):
+        self.config = json.loads(self.conf_path.read_text(encoding='utf-8'))
+        self.port = self.config['port']
+        self.base_url = f'{"https" if self.config.get("tls") else "http"}://127.0.0.1:{self.port}'
         env = dict(os.environ, L4D2PANEL_CONFIG=str(self.conf_path), PYTHONUNBUFFERED='1', PYTHONPATH=str(PANEL_ENTRY.parent))
-        self.log = open(self.log_path, 'w')
+        self.log = open(self.log_path, 'a')
         self.proc = subprocess.Popen([sys.executable, str(self.entry), '--config', str(self.conf_path)], cwd=str(self.dir), env=env, stdout=self.log, stderr=subprocess.STDOUT)
         for _ in range(200):
             if self.proc.poll() is not None: raise RuntimeError('panel exited during startup:\n' + self.log_path.read_text())
@@ -114,13 +119,13 @@ class Panel:
             self.proc.terminate()
             try: self.proc.wait(timeout=10)
             except subprocess.TimeoutExpired: self.proc.kill(); self.proc.wait()
-        self.log.close()
+        if getattr(self, 'log', None): self.log.close()
 
     def output(self):
         return self.log_path.read_text(errors='replace')
 
     def client(self):
-        return httpx.Client(base_url=self.base_url, timeout=60)
+        return httpx.Client(base_url=self.base_url, timeout=60, verify=False)
 
     def login(self, user=OWNER_USER, password=OWNER_PW, client=None):
         c = client or self.client()

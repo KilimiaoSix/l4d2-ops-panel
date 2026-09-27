@@ -2,6 +2,7 @@
 running LinuxGSM action, features, the perf sample and the cached game flags."""
 from ..integrations.a2s import A2SClient
 from ..integrations.srcds import srcds_running
+from ..integrations.join_address import join_info
 from ..settings import Settings
 from .features import FeatureDetector
 from .game import GameService
@@ -10,19 +11,21 @@ from .server_control import ServerControl
 
 
 class StatusService:
-    def __init__(self, settings: Settings, a2s: A2SClient, game: GameService, features: FeatureDetector, monitoring: Monitoring, server: ServerControl, process_check=srcds_running):
+    def __init__(self, settings: Settings, a2s: A2SClient, game: GameService, features: FeatureDetector, monitoring: Monitoring, server: ServerControl, process_check=srcds_running, game_ready=None):
         self.settings, self.a2s, self.game, self.features, self.monitoring, self.server, self.process_check = settings, a2s, game, features, monitoring, server, process_check
+        self.game_ready = game_ready or (lambda: True)
 
     def build(self, account: dict) -> dict:
-        st = self.a2s.query()
+        ready = self.game_ready()
+        st = self.a2s.query() if ready else {'online': False}
         if self.settings.server_backend == 'docker':
             st['backend'] = 'docker'
-            try: st['srcds'] = self.server.running()
+            try: st['srcds'] = self.server.running() if ready else False
             except Exception as exc:
                 st['srcds'] = False
                 st['server_error'] = str(exc)
         else:
-            st['srcds'] = self.process_check()
+            st['srcds'] = self.process_check() if ready else False
         if not st['online'] and st['srcds']:   # (2026-09-19) A2S throttled but the process is up: confirm via RCON instead of reporting "not responding"
             try:
                 _, sm, _ = self.game.players(); cache = self.a2s.cache
@@ -32,6 +35,7 @@ class StatusService:
         st['sys'] = self.monitoring.sysinfo(); st['action'] = self.server.state
         st['account'] = {'user': account['username'], 'role': account['role']}
         st['features'] = fe = self.features.get(st['online']); st['title'] = self.settings.panel_title; st['display_host'] = self.settings.display_host
-        st['perf'] = self.monitoring.latest_perf()
+        st['join'] = join_info(self.settings)
+        st['perf'] = self.monitoring.latest_perf() if ready else None
         st.update(self.game.flags(st['online'], fe))
         return st

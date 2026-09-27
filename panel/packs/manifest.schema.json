@@ -1,0 +1,177 @@
+{
+  "$defs": {
+    "OfficialDownload": {
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "max_bytes": {
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "files": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Files",
+          "type": "object"
+        }
+      },
+      "required": [
+        "url",
+        "sha256",
+        "max_bytes",
+        "files"
+      ],
+      "title": "OfficialDownload",
+      "type": "object"
+    },
+    "PackDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "default": {
+          "type": "boolean",
+          "title": "Default"
+        },
+        "visible": {
+          "title": "Visible",
+          "type": "boolean"
+        },
+        "requires": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires",
+          "type": "array"
+        },
+        "conflicts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Conflicts",
+          "type": "array"
+        },
+        "payload": {
+          "title": "Payload",
+          "type": "string"
+        },
+        "provides": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Provides",
+          "type": "array"
+        },
+        "probes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Probes",
+          "type": "array"
+        },
+        "upstreams": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Upstreams",
+          "type": "array"
+        },
+        "compile_upstreams": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Compile Upstreams",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "summary",
+        "version",
+        "required",
+        "default",
+        "visible",
+        "requires",
+        "conflicts",
+        "payload",
+        "provides",
+        "probes",
+        "upstreams"
+      ],
+      "title": "PackDefinition",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": 1,
+      "title": "Schema",
+      "type": "integer"
+    },
+    "architecture": {
+      "const": "linux-x86_64-host-x86-game",
+      "title": "Architecture",
+      "type": "string"
+    },
+    "profiles": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Profiles",
+      "type": "object"
+    },
+    "packs": {
+      "items": {
+        "$ref": "#/$defs/PackDefinition"
+      },
+      "title": "Packs",
+      "type": "array"
+    },
+    "official_downloads": {
+      "additionalProperties": {
+        "$ref": "#/$defs/OfficialDownload"
+      },
+      "title": "Official Downloads",
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema",
+    "architecture",
+    "profiles",
+    "packs"
+  ],
+  "title": "PackManifest",
+  "type": "object"
+}

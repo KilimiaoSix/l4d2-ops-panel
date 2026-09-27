@@ -5,15 +5,19 @@ from ..errors import ApiError
 from ..integrations.lgsm import Lgsm
 from ..integrations.srcds import srcds_running
 from ..store.audit import AuditLog
+from ..operations import OperationGate
 
 ACTIONS = ('start', 'stop', 'restart', 'monitor')
 
 
 class ServerControl:
-    def __init__(self, lgsm: Lgsm, audit: AuditLog, docker=None, settings=None, operation_lock=None):
+    def __init__(self, lgsm: Lgsm, audit: AuditLog, docker=None, settings=None, operation_lock=None, gate=None, invalidate=None):
         self.lgsm, self.audit, self.docker, self.settings = lgsm, audit, docker, settings
         self.operation_lock = operation_lock if operation_lock is not None else threading.Lock()
         self.state = {'running': None, 'last': ''}
+        self.gate = gate if gate is not None else OperationGate()
+        self.invalidate = invalidate or (lambda: None)
+        self.start_guard = lambda: True
 
     @property
     def backend(self):
@@ -28,8 +32,13 @@ class ServerControl:
     def run(self, action: str, actor: str) -> bool:
         """Kick off the action; False when another action or install is still running."""
         if action not in ACTIONS: raise ApiError(400, 'bad action')
-        if not self.operation_lock.acquire(blocking=False): return False
+        self.gate.enter()
+        if not self.operation_lock.acquire(blocking=False):
+            self.gate.leave()
+            return False
         try:
+            if action in ('start', 'restart') and not self.start_guard():
+                raise ApiError(409, '配置或插件文件事务未完成，请先恢复后再启动游戏')
             backend = self.backend
             if not self.available():
                 name = 'Docker 或 Compose 安装文件' if self.settings and self.settings.server_backend == 'docker' else 'LinuxGSM 脚本'
@@ -44,9 +53,12 @@ class ServerControl:
                 finally:
                     self.state['running'] = None
                     self.operation_lock.release()
+                    try: self.invalidate()
+                    finally: self.gate.leave()
             threading.Thread(target=work, daemon=True).start()
         except Exception:
             self.state['running'] = None
             self.operation_lock.release()
+            self.gate.leave()
             raise
         return True

@@ -8,6 +8,17 @@ from tests.fakes.game import A2S_INFO
 ALL_FEATURES = {'lgsm': True, 'workshop': True, 'workshop_search': False, 'console_log': True, 'perf': True, 'sourcemod': True, 'whitelist': True, 'preset': True, 'points': True}
 
 
+def test_bootstrap_health_is_anonymous_and_bound_to_actual_process(panel, fake_game):
+    response = panel.client().get('/api/health')
+    assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
+    data = response.json()
+    assert set(data) == {'version', 'boot', 'pid', 'ready'}
+    assert data['ready'] and data['pid'] == panel.proc.pid and len(data['boot']) == 32
+    assert fake_game.commands == []
+    first = data['boot']; panel.stop(); panel.start()
+    assert panel.client().get('/api/health').json()['boot'] != first
+
+
 def test_status_online(api, fake_game):
     st = api.get('/api/status').json()
     assert {k: st[k] for k in ('online', 'name', 'map', 'players', 'max', 'bots')} == {'online': True, 'name': A2S_INFO['name'], 'map': 'c2m1_highway', 'players': 2, 'max': 12, 'bots': 5}
@@ -16,6 +27,8 @@ def test_status_online(api, fake_game):
     assert st['account'] == {'user': 'admin', 'role': 'owner'}
     assert st['features'] == ALL_FEATURES
     assert st['title'] == 'Test Panel' and st['display_host'] == 'test.example'
+    assert st['join']['command'] == f'connect test.example:{fake_game.port}'
+    assert st['join']['public_access'] == 'unverified'
     assert st['perf'] == {'t': '12:00:30', 'fps': '30.0', 'out_kb': 12.3}
     assert {k: st[k] for k in ('preset', 'whitelist', 'difficulty', 'ff', 'burn')} == {'preset': 'te12', 'whitelist': True, 'difficulty': 'normal', 'ff': 0.1, 'burn': 0.5}
     for cmd in ('sm plugins list', 'sm_preset', 'sm_cvar sm_whitelist_enable', 'z_difficulty', 'survivor_friendly_fire_factor_expert', 'survivor_burn_factor_expert'):

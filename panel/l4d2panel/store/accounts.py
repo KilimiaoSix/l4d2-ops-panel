@@ -37,6 +37,22 @@ class AccountStore:
         except sqlite3.IntegrityError:
             raise DuplicateUsername(username)
 
+    def create_initial_owner(self, username, pw_hash, last_login=None):
+        """Claim the empty database atomically, including across processes. None means already claimed."""
+        with self.db.cursor() as c:
+            c.execute('BEGIN IMMEDIATE')
+            try:
+                if c.execute('SELECT 1 FROM accounts LIMIT 1').fetchone():
+                    c.rollback()
+                    return None
+                aid = c.execute("INSERT INTO accounts(username,pass,role,created,last_login) VALUES(?,?,'owner',?,?)",
+                                (username, pw_hash, int(time.time()), last_login)).lastrowid
+                c.commit()
+                return aid
+            except Exception:
+                c.rollback()
+                raise
+
     def update(self, account_id, **fields):
         """fields: any of pass, role, steamid, flags, note (only the given ones change)."""
         if not fields: return

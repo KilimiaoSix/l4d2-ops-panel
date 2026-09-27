@@ -5,3 +5,7 @@ LinuxGSM / SourceMod files) and store (SQLite). `context.build_context()` wires 
 nothing is created at import time, so every piece can be built with fakes in tests.
 """
 __version__ = '2.0.0'
+try:
+    from ._build_version import __version__
+except ModuleNotFoundError:
+    pass

@@ -24,6 +24,7 @@ def test_compose_launches_game_without_overwriting_cfg(tmp_path):
     game = config['services']['l4d2']
     assert game['platform'] == 'linux/amd64'
     assert game['user'] == f'{os.getuid()}:{os.getgid()}'
+    assert game['environment'] == {'HOME': '/tmp/l4d2-panel', 'SteamAppId': '550'}
     assert game['entrypoint'] == ['/bin/sh', '/l4d2/left4dead2/.l4d2-panel-start.sh']
     assert '/l4d2/start.sh' not in json.dumps(config)
     assert 'do-not-export' not in json.dumps(config)
@@ -187,6 +188,53 @@ def test_refuses_unowned_compose_file_without_overwriting_it(tmp_path, docker_fi
         installer.run(InstallOptions(), Job('l4d2', 'install'))
     assert installer.compose_file.read_text() == 'services: {other: {image: existing}}'
     assert not installer.game_dir.exists()
+
+
+def test_start_script_prepares_sdk_for_non_root_home_before_engine(tmp_path):
+    import subprocess
+    from l4d2panel.integrations.game_installer import START_SCRIPT
+    root = tmp_path / 'image'; home = tmp_path / 'home'
+    (root / 'bin').mkdir(parents=True)
+    (root / 'bin/steamclient.so').write_bytes(b'fixture SDK')
+    (root / 'left4dead2/cfg').mkdir(parents=True)
+    (root / 'left4dead2/cfg/server.cfg').write_text('mp_gamemode coop\n')
+    binary = root / 'srcds_run'
+    binary.write_text('#!/bin/sh\ntest -L "$HOME/.steam/sdk32/steamclient.so"\n'
+                      'cat "$HOME/.steam/sdk32/steamclient.so"\n')
+    binary.chmod(0o700)
+    script = tmp_path / 'start.sh'
+    script.write_text(START_SCRIPT.replace('/l4d2/', str(root) + '/'))
+    for _ in range(2):
+        result = subprocess.run(['/bin/sh', str(script)], env={**os.environ, 'HOME': str(home)},
+                                capture_output=True, check=True)
+        assert result.stdout == b'fixture SDK'
+
+
+@pytest.mark.parametrize('profile,extension,success', [
+    ('// profile\r\npanel_capacity 31\r\n', True, True),
+    ('panel_capacity 31\n', False, False),
+    ('panel_capacity 32\n', True, False),
+    ('panel_capacity 31\npanel_capacity 31\n', True, False),
+    ('panel_capacity 31; touch injected\n', True, False),
+    ('panel_capacity $(touch injected)\n', True, False),
+])
+def test_startup_capacity_profile_is_bounded_and_never_executed(tmp_path, profile, extension, success):
+    import subprocess
+    from l4d2panel.integrations.game_installer import START_SCRIPT
+    (tmp_path / 'cfg').mkdir(); (tmp_path / 'addons').mkdir()
+    (tmp_path / 'cfg/server.cfg').write_text('mp_gamemode versus\n')
+    (tmp_path / 'cfg/panel-capacity.cfg').write_bytes(profile.encode())
+    if extension: (tmp_path / 'addons/l4dtoolz.so').touch()
+    binary = tmp_path / 'srcds_run'; binary.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n'); binary.chmod(0o700)
+    script = tmp_path / 'start.sh'
+    script.write_text(START_SCRIPT.replace('/l4d2/left4dead2', str(tmp_path)).replace('/l4d2/srcds_run', str(binary)))
+    result = subprocess.run(['/bin/sh', str(script), '-console'], cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == (0 if success else 78)
+    assert not (tmp_path / 'injected').exists()
+    if success:
+        args = result.stdout.splitlines()
+        assert args[args.index('+sv_setmax') + 1] == args[args.index('-maxplayers') + 1] == '31'
+        assert args[args.index('+mp_gamemode') + 1] == 'versus'
 
 
 def test_refuses_foreign_container_with_same_compose_project(tmp_path, docker_fixture):

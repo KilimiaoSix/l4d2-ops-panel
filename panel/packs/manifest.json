@@ -1,0 +1,207 @@
+{
+  "schema": 1,
+  "architecture": "linux-x86_64-host-x86-game",
+  "profiles": {
+    "minimal": [
+      "minimal"
+    ],
+    "full": [
+      "minimal",
+      "multiplayer",
+      "infected",
+      "points"
+    ]
+  },
+  "packs": [
+    {
+      "id": "minimal",
+      "name": "最小插件包",
+      "summary": "Metamod、SourceMod、白名单、中文服名；附带特感预设工具，安装特感包后才可用。",
+      "version": "1",
+      "required": true,
+      "default": true,
+      "visible": true,
+      "requires": [],
+      "conflicts": [],
+      "payload": "minimal",
+      "provides": [
+        "sourcemod",
+        "whitelist",
+        "hostname"
+      ],
+      "probes": [
+        "Private Whitelist",
+        "Panel Hostname"
+      ],
+      "upstreams": [
+        "metamod",
+        "sourcemod",
+        "panel"
+      ]
+    },
+    {
+      "id": "left4dhooks",
+      "name": "Left 4 DHooks",
+      "summary": "多人和特感插件的底层依赖。",
+      "version": "f90ae5e6",
+      "required": false,
+      "default": false,
+      "visible": false,
+      "requires": [
+        "minimal"
+      ],
+      "conflicts": [],
+      "payload": "left4dhooks",
+      "provides": [
+        "left4dhooks"
+      ],
+      "probes": [
+        "Left 4 DHooks"
+      ],
+      "upstreams": [
+        "left4dhooks"
+      ],
+      "compile_upstreams": [
+        "multicolors"
+      ]
+    },
+    {
+      "id": "l4dtoolz",
+      "name": "L4DToolZ 2.5.1",
+      "summary": "安装时从官方固定地址下载并校验，提供引擎槽位扩展。",
+      "version": "2.5.1",
+      "required": false,
+      "default": false,
+      "visible": false,
+      "requires": [
+        "minimal"
+      ],
+      "conflicts": [],
+      "payload": "l4dtoolz",
+      "provides": [
+        "engine_slots"
+      ],
+      "probes": [],
+      "upstreams": [
+        "l4dtoolz"
+      ]
+    },
+    {
+      "id": "multiplayer",
+      "name": "多人合作",
+      "summary": "额外生还者管理及依赖；人数设置为 4–12 人，仍需在实服验证。",
+      "version": "73504439",
+      "required": false,
+      "default": false,
+      "visible": true,
+      "requires": [
+        "minimal",
+        "left4dhooks",
+        "l4dtoolz"
+      ],
+      "conflicts": [],
+      "payload": "multiplayer",
+      "provides": [
+        "survivor_slots"
+      ],
+      "probes": [
+        "MultiSlots",
+        "CreateSurvivorBot"
+      ],
+      "upstreams": [
+        "harry-plugins"
+      ]
+    },
+    {
+      "id": "infected",
+      "name": "特感与强度预设",
+      "summary": "Infected Bots、生成修复、依赖和预设文件。",
+      "version": "73504439",
+      "required": false,
+      "default": false,
+      "visible": true,
+      "requires": [
+        "minimal",
+        "left4dhooks",
+        "spawn-fixes"
+      ],
+      "conflicts": [],
+      "payload": "infected",
+      "provides": [
+        "infected",
+        "preset"
+      ],
+      "probes": [
+        "Infected Bots",
+        "SI Preset"
+      ],
+      "upstreams": [
+        "harry-plugins"
+      ]
+    },
+    {
+      "id": "spawn-fixes",
+      "name": "特感生成依赖",
+      "summary": "生成上限、僵尸生成和战场限制修复。",
+      "version": "1",
+      "required": false,
+      "default": false,
+      "visible": false,
+      "requires": [
+        "minimal",
+        "left4dhooks"
+      ],
+      "conflicts": [],
+      "payload": "spawn-fixes",
+      "provides": [],
+      "probes": [
+        "Manual-Spawn Special Infected",
+        "Zombie Spawn Fix",
+        "Unrestrict Panic Battlefield"
+      ],
+      "upstreams": [
+        "harry-plugins",
+        "moyu",
+        "umlka",
+        "sourcescramble"
+      ]
+    },
+    {
+      "id": "points",
+      "name": "积分商店",
+      "summary": "积分商店与地图积分重置；同一地图重连不会重复重置。",
+      "version": "1.9.3-panel2",
+      "required": false,
+      "default": false,
+      "visible": true,
+      "requires": [
+        "minimal",
+        "left4dhooks"
+      ],
+      "conflicts": [],
+      "payload": "points",
+      "provides": [
+        "points"
+      ],
+      "probes": [
+        "Points System",
+        "[PS] Map Reset"
+      ],
+      "upstreams": [
+        "umlka",
+        "panel"
+      ]
+    }
+  ],
+  "official_downloads": {
+    "l4dtoolz": {
+      "url": "https://github.com/lakwsh/l4dtoolz/releases/download/2.5.1/l4dtoolz-2.5.1-main.zip",
+      "sha256": "86c5461a69fd756b8c90d48553a7111a3d7814012aa0bd3c510aae5591fb1049",
+      "max_bytes": 2097152,
+      "files": {
+        "l4dtoolz.so": "addons/l4dtoolz.so",
+        "l4dtoolz.vdf": "addons/l4dtoolz.vdf"
+      }
+    }
+  }
+}

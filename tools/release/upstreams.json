@@ -1,0 +1,160 @@
+{
+  "schema": 1,
+  "upstreams": {
+    "metamod": {
+      "version": "1.12.0.1226",
+      "url": "https://github.com/alliedmodders/metamod-source/releases/download/1.12.0.1226/mmsource-1.12.0-git1226-linux.tar.gz",
+      "sha256": "f3ab8688885c945516c2616c3e2792451615bd8ad752ed5e0b96334b49f49077",
+      "cache": "metamod.tar.gz",
+      "architecture": "linux-x86+x86_64",
+      "license": "zlib/libpng (pinned release LICENSE.txt); engine SDK components retain their own terms",
+      "source": "https://github.com/alliedmodders/metamod-source/tree/1.12.0.1226",
+      "license_url": "https://raw.githubusercontent.com/alliedmodders/metamod-source/1.12.0.1226/LICENSE.txt",
+      "runtime_requires": [],
+      "compile_requires": [],
+      "distribution": "bundled",
+      "license_artifact": {
+        "url": "https://raw.githubusercontent.com/alliedmodders/metamod-source/1.12.0.1226/LICENSE.txt",
+        "cache": "metamod-license.txt",
+        "sha256": "98fe1b07f3f65b98ddbee6e3af2c8ecedf5c75fe073fd41401a9f79a3206859b"
+      }
+    },
+    "sourcemod": {
+      "version": "1.12.0.7253",
+      "url": "https://github.com/alliedmodders/sourcemod/releases/download/1.12.0.7253/sourcemod-1.12.0-git7253-linux.tar.gz",
+      "sha256": "6bbcab989cda0ada83600d0dcb0f46affd16529b2b02ed2dba1b5baeaf02fdb4",
+      "cache": "sourcemod.tar.gz",
+      "architecture": "linux-x86+x86_64",
+      "license": "GPL-3.0 with SourceMod exceptions; bundled components retain their own licenses",
+      "source": "https://github.com/alliedmodders/sourcemod/tree/1.12.0.7253",
+      "license_url": "https://raw.githubusercontent.com/alliedmodders/sourcemod/1.12.0.7253/public/licenses/LICENSE.txt",
+      "runtime_requires": [
+        "metamod"
+      ],
+      "compile_requires": [],
+      "distribution": "bundled"
+    },
+    "l4dtoolz": {
+      "version": "2.5.1",
+      "commit": "efa19444081c0ff02913a1365930a09c49cb332b",
+      "url": "https://github.com/lakwsh/l4dtoolz/releases/download/2.5.1/l4dtoolz-2.5.1-main.zip",
+      "sha256": "86c5461a69fd756b8c90d48553a7111a3d7814012aa0bd3c510aae5591fb1049",
+      "cache": "l4dtoolz-2.5.1-main.zip",
+      "architecture": "linux-x86",
+      "license": "Redistribution permission unconfirmed; user-approved direct official download only",
+      "source": "https://github.com/lakwsh/l4dtoolz/tree/efa19444081c0ff02913a1365930a09c49cb332b",
+      "runtime_requires": [],
+      "compile_requires": [],
+      "distribution": "official-download"
+    },
+    "left4dhooks": {
+      "version": "f90ae5e6",
+      "commit": "f90ae5e62228e0b7baf12cda922e3fd40db844f4",
+      "url": "https://codeload.github.com/SilvDev/Left4DHooks/tar.gz/f90ae5e62228e0b7baf12cda922e3fd40db844f4",
+      "sha256": "dd5480e092f5f96c21fcf6bfe1dcea8fc31f89cde9fb164f9b826a6f699d07e3",
+      "cache": "left4dhooks.tar.gz",
+      "architecture": "SourcePawn/linux-x86 game",
+      "license": "GPL-3.0",
+      "source": "https://github.com/SilvDev/Left4DHooks/tree/f90ae5e62228e0b7baf12cda922e3fd40db844f4",
+      "runtime_requires": [
+        "sourcemod (bundled DHooks extension)"
+      ],
+      "compile_requires": [],
+      "distribution": "bundled"
+    },
+    "umlka": {
+      "version": "be340451",
+      "commit": "be340451f29286f072c470f2c19bf7f0bc885ce4",
+      "url": "https://codeload.github.com/umlka/l4d2/tar.gz/be340451f29286f072c470f2c19bf7f0bc885ce4",
+      "sha256": "895fe4c6843e599232213b7b8b9649b7f8f0da45e4d8743c34eca394294cb3f9",
+      "cache": "umlka.tar.gz",
+      "architecture": "SourcePawn/linux-x86 game",
+      "license": "GPL-3.0",
+      "source": "https://github.com/umlka/l4d2/tree/be340451f29286f072c470f2c19bf7f0bc885ce4",
+      "runtime_requires": [
+        "left4dhooks (Points)",
+        "sourcescramble (Zombie Spawn Fix)"
+      ],
+      "compile_requires": [
+        "left4dhooks.inc",
+        "sourcescramble.inc",
+        "ps_natives.inc"
+      ],
+      "distribution": "bundled"
+    },
+    "moyu": {
+      "version": "1cb29bf3",
+      "commit": "1cb29bf3f3e8cc972db5e8db01a17aad90e318eb",
+      "url": "https://codeload.github.com/Target5150/MoYu_Server_Stupid_Plugins/tar.gz/1cb29bf3f3e8cc972db5e8db01a17aad90e318eb",
+      "sha256": "979174a9b246e8645a4d984fa06dca5cb44b60289e0674b2ee5e61c2d539aa6a",
+      "cache": "moyu.tar.gz",
+      "architecture": "SourcePawn/linux-x86 game",
+      "license": "GPL-3.0",
+      "source": "https://github.com/Target5150/MoYu_Server_Stupid_Plugins/tree/1cb29bf3f3e8cc972db5e8db01a17aad90e318eb",
+      "runtime_requires": [
+        "sourcescramble",
+        "sourcemod"
+      ],
+      "compile_requires": [
+        "sourcescramble.inc",
+        "@Forgetest/gamedatawrapper.inc (same pinned repo)"
+      ],
+      "distribution": "bundled"
+    },
+    "sourcescramble": {
+      "version": "0.8.2.2",
+      "url": "https://github.com/nosoop/SMExt-SourceScramble/releases/download/0.8.2.2/package.tar.gz",
+      "cache": "sourcescramble.tar.gz",
+      "sha256": "2b90e912ca7b47b1363f0e1492981be6a88422daa54ea2f78f2d7e80f88ecca6",
+      "architecture": "linux-x86+x86_64 SM API8",
+      "license": "GPL-3.0",
+      "source": "https://github.com/nosoop/SMExt-SourceScramble/tree/0.8.2.2",
+      "distribution": "bundled",
+      "runtime_requires": [
+        "sourcemod 1.12"
+      ],
+      "compile_requires": [],
+      "license_artifact": {
+        "url": "https://raw.githubusercontent.com/nosoop/SMExt-SourceScramble/0.8.2.2/LICENSE",
+        "cache": "sourcescramble-license.txt",
+        "sha256": "db49b21d4f023f30f218a6bf0e08b3c790398035dacd653611bd96415362db29"
+      }
+    },
+    "harry-plugins": {
+      "version": "73504439",
+      "commit": "735044396e8ee7469a7b98d4a1ff9bfc0f57fb2f",
+      "url": "https://codeload.github.com/fbef0102/L4D1_2-Plugins/tar.gz/735044396e8ee7469a7b98d4a1ff9bfc0f57fb2f",
+      "cache": "harry-plugins.tar.gz",
+      "sha256": "b82eb7293f840d52a148e32c39209608a213cf13d678d32e90b48f6282f89723",
+      "architecture": "SourcePawn/linux-x86 game",
+      "license": "GPL-3.0",
+      "source": "https://github.com/fbef0102/L4D1_2-Plugins/tree/735044396e8ee7469a7b98d4a1ff9bfc0f57fb2f",
+      "runtime_requires": [
+        "l4dmultislots: left4dhooks, l4d_CreateSurvivorBot, l4dtoolz",
+        "l4dinfectedbots: left4dhooks, spawn_infected_nolimit, zombie_spawn_fix, l4d_unrestrict_panic_battlefield"
+      ],
+      "compile_requires": [
+        "multicolors.inc",
+        "left4dhooks.inc",
+        "l4d_CreateSurvivorBot.inc",
+        "spawn_infected_nolimit.inc"
+      ],
+      "distribution": "bundled"
+    },
+    "multicolors": {
+      "version": "d2f2dc91",
+      "commit": "d2f2dc9126255571c0fc4499d5729cacb57265ca",
+      "url": "https://codeload.github.com/Bara/Multi-Colors/tar.gz/d2f2dc9126255571c0fc4499d5729cacb57265ca",
+      "cache": "multicolors.tar.gz",
+      "sha256": "f067c20b822b09bff090e633be2a0b102d82d52f85b67a5626d44aef02839614",
+      "license": "GPL-3.0",
+      "source": "https://github.com/Bara/Multi-Colors/tree/d2f2dc9126255571c0fc4499d5729cacb57265ca",
+      "distribution": "bundled",
+      "architecture": "SourcePawn compile-time includes",
+      "runtime_requires": [],
+      "compile_requires": [
+        "sourcemod.inc"
+      ]
+    }
+  }
+}

@@ -28,11 +28,14 @@ class GameService:
     def __init__(self, paths: Paths, rcon: RconClient, audit: AuditLog, flags_ttl=15):
         self.paths, self.rcon, self.audit, self.flags_ttl = paths, rcon, audit, flags_ttl
         self.modes = GameModes(rcon, audit, paths.server_cfg)
+        self.preset_guard = lambda name: None
         # 15 s cache cuts RCON churn and, crucially, keeps last-good values so one flaky RCON call doesn't blank the tiles
         self._flags = {'t': 0, 'preset': '', 'whitelist': None, 'difficulty': '', 'ff': None, 'burn': None}
 
     def players(self):
         """-> (human rows, summary counts, raw status text)"""
+        if not self.paths.server_cfg.is_file():
+            return [], {'humans': 0, 'bots': 0, 'max': 0, 'map': ''}, '游戏尚未安装'
         out = self.rcon.run('status'); rows, summary = parse_status(out); return rows, summary, out
 
     def invalidate_flags(self):
@@ -73,6 +76,7 @@ class GameService:
 
     def set_preset(self, name: str, actor: str) -> str:
         if name not in PRESETS: raise ApiError(400, 'bad preset')
+        self.preset_guard(name)
         out = self.rcon.run('sm_preset ' + name); self.invalidate_flags(); self.audit.add(actor, 'game.preset', name)
         return out
 

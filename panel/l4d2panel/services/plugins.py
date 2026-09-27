@@ -62,6 +62,7 @@ class PluginService:
 
     def upload_target(self, raw_name) -> tuple:
         """-> (plugin name, temp path to stream the body into). Raises 400 for an unusable name."""
+        if not self.paths.sm_plugins.is_dir(): raise ApiError(409, '请先安装游戏和 SourceMod，再上传插件')
         nm = plugin_name(raw_name)
         if not nm: raise ApiError(400, '只接受 .smx 文件')
         return nm, self.paths.sm_plugins / (nm + '.smx.tmp')

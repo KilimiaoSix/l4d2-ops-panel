@@ -8,6 +8,8 @@ import OverviewView from './views/OverviewView.vue'
 import PlayersView from './views/PlayersView.vue'
 import PluginsView from './views/PluginsView.vue'
 import ServerView from './views/ServerView.vue'
+import PanelConfigView from './views/PanelConfigView.vue'
+import PanelSetupView from './views/PanelSetupView.vue'
 
 export interface ViewMeta { title: string; eyebrow: string }
 
@@ -21,6 +23,8 @@ export const VIEWS: { name: string; title: string; eyebrow: string; component: u
   { name: 'logs', title: '日志 / 性能', eyebrow: 'Logs · Perf', component: LogsView },
   { name: 'server', title: '服务器', eyebrow: 'Server', component: ServerView },
   { name: 'accounts', title: '账号', eyebrow: 'Accounts', component: AccountsView },
+  { name: 'panel', title: '面板设置', eyebrow: 'Panel settings', component: PanelConfigView },
+  { name: 'setup', title: '开服向导', eyebrow: 'Getting started', component: PanelSetupView },
 ]
 
 const LAST_VIEW_KEY = 'l4d2view'
