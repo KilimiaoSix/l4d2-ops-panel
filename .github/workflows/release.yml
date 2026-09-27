@@ -49,7 +49,7 @@ jobs:
           key_file=$(mktemp)
           trap 'rm -f -- "$key_file"' EXIT
           printf '%s\n' "$RELEASE_SIGNING_PRIVATE_KEY" > "$key_file"
-          mirror=$(python -c 'import json; p=json.load(open("tools/release/toolchain.json")); assert p["mirror"], "Configure a real mirror before release"; print(p["mirror"])')
+          mirror=$(python -c 'import json; p=json.load(open("tools/release/toolchain.json")); print(p["mirror"] or "")')
           python tools/release/render_bootstrap.py --version "$RELEASE_VERSION" --public-key tools/release/release-public.pem --mirror "$mirror" --output dist/get.sh
           python tools/release/sign.py --directory dist --version "$RELEASE_VERSION" --public-key tools/release/release-public.pem --private-key "$key_file"
           python tools/release/verify.py --directory dist --version "$RELEASE_VERSION" --public-key tools/release/release-public.pem --extract "$RUNNER_TEMP/verified-release"

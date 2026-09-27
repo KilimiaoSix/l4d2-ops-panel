@@ -72,15 +72,18 @@ def test_even_signed_archive_rejects_unsafe_members(tmp_path, name, kind):
     assert not (tmp_path / 'stage').exists()
 
 
-def test_rendered_installer_has_trusted_key_and_valid_shell(tmp_path, keys):
+@pytest.mark.parametrize('mirror', ['', 'https://mirror.example/releases'])
+def test_rendered_installer_has_trusted_key_and_valid_shell(tmp_path, keys, mirror):
     path = tmp_path / 'get.sh'
-    script = render(keys[1], '2.1.0', 'https://mirror.example/releases')
+    script = render(keys[1], '2.1.0', mirror)
     path.write_text(script)
     subprocess.run(['bash', '-n', str(path)], check=True)
     result = subprocess.run(['bash', str(path), '--help'], check=True, capture_output=True, text=True)
     assert '--repair-docker' in result.stdout and '@@' not in script
     assert 'BEGIN PRIVATE KEY' not in script and 'BEGIN PUBLIC KEY' in script
     assert 'RELEASE_VERSION=' in script  # /etc/os-release defines VERSION itself.
+    assert f"MIRROR='{mirror}'" in script
+    assert "PRIMARY='https://github.com/KilimiaoSix/l4d2-ops-panel/releases/download'" in script
     with pytest.raises(ValueError): render(keys[0], '2.1.0')
     for mirror in ("https://a/'$(id)", 'http://mirror.example', 'https://u:p@mirror.example', 'https://a/?token=x'):
         with pytest.raises(ValueError): render(keys[1], '2.1.0', mirror)

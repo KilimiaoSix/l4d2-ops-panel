@@ -118,8 +118,26 @@ python3 -m tests.docker_smoke --keep   # 同样验证，完成后保留本地面
 
 ## 测试
 
+新手化改造的配置底座与验收记录见 [实施记录](10-reports/2026-09-27/beginner-implementation-progress.md)。`build_context(settings, base_dir, conf)` 的第三个参数必须是实际启动配置文件；进程内 fixture 也应写入该文件。
+
+`GET/POST /api/panel-config` 仅 owner 可用。POST 使用 `{revision,updates,restart}`；名称、显示地址、上传上限、Steam Key 即时更新，其余允许字段先确认重启。旧的未知 JSON 键保留，新更新的未知/非白名单键拒绝；秘密只返回 set 标记。配置外部修改与待重启任务冲突返回 409。`GET/POST /api/onboarding` 将向导步骤和非秘密草稿保存到 panel_state；完成时检查游戏安装、最小插件包和待确认重启，重新打开保留草稿。外部客户端入服仍单独标为未验证。
+
+后台线程必须使用共享 `OperationGate` 注册存续期间的活动；新的后台任务用现有 `JobRegistry`，游戏控制沿用 `ServerControl`。不能在重启检查之后另开未注册 daemon 线程。实际 systemd 的主 PID 和 cgroup 均匹配才允许自退，发布单元必须包含 `RestartPreventExitStatus=78`。重启 journal 与配置备份均在数据保留清单中。
+
+配置/向导定向回归：
+
 ```bash
-cd panel && python3 -m pytest          # 约 90 秒
+cd panel
+python -m pytest tests/unit/test_panel_config_files.py tests/unit/test_panel_state.py tests/unit/test_panel_restart.py tests/parity/test_panel_config.py tests/parity/test_onboarding.py
+python panel.py --config /absolute/path/panel.json --check-config
+# 仅在没有 l4d2panel.service 的隔离 systemd 主机或容器内，以 root 运行；面板实际以 nobody 身份启动。
+python -m tests.systemd_smoke
+```
+
+`--check-config` 不启动监听、不建账号/数据库/游戏目录。`--restore-config` 恢复当前启动配置对应的待重启备份，拒绝覆盖外部变更。`tests.systemd_smoke --keep` 保留独立预览供浏览器验证，Ctrl-C 停服并删除本测试创建的临时 unit。生产服务器已有同名服务时该测试直接拒绝执行。
+
+```bash
+cd panel && python3 -m pytest          # 运行时间取决于主机；当前全量约 5 分钟
 ```
 
 两层：
@@ -131,30 +149,56 @@ cd panel && python3 -m pytest          # 约 90 秒
 
 夹具在 `tests/conftest.py`（临时 game_dir、面板子进程、登录好的 httpx client）和 `tests/fakes/`（`game.py`、`steam.py`、`vpk.py`）。用 `@pytest.mark.panel(key=value)` 覆盖某个用例的 panel.json，`@pytest.mark.game(a2s_challenge=True)` 调假游戏。
 
-## 发布到服务器
+## 候选构建与引导验证
 
-服务器上没有 git，部署 = 把 `panel/` 目录同步过去。
+固定依赖、签名格式、首次信任、镜像和密钥轮换见 [发布签名说明](release-signing.md)。`tools/release/build.py` 构建前端并使用固定 SourceMod 编译器生成插件，`tests.pack_release_smoke` 消费实际 tar 中的文件和清单。L4DToolZ 由安装器从固定官方版本下载并验证 SHA256，不包含在 tar 中。
+
+```bash
+python tools/release/build.py --version 2.1.0-candidate.10
+cd panel
+python -m tests.pack_release_smoke ../dist/l4d2-panel-linux-x86_64.tar.gz
+```
+
+引导测试仅在独立 Linux systemd VM 内运行；`tools/testing/bootstrap_vm.py` 创建校验过的官方 Ubuntu cloud image 的独立副本，`bootstrap_vm_control.py` 传入已签名候选并收集 probe。夹具根目录包含测试密钥和私有安装日志，须保持 0700，导出报告时删除初始密码行。示例中的候选资产和测试密钥需要预先准备，不能用于生产发布：
+
+```bash
+python tools/testing/bootstrap_vm.py start --codename jammy
+python tools/testing/bootstrap_vm_control.py install --codename jammy --version 2.1.0-candidate.10
+python tools/testing/bootstrap_vm_control.py status --codename jammy --version 2.1.0-candidate.10
+python tools/testing/bootstrap_vm_control.py probe --codename jammy --version 2.1.0-candidate.10
+python tools/testing/bootstrap_vm.py stop --codename jammy
+```
+
+`.github/workflows/ci.yml` 配置 Python 3.10.20/3.12.13 回归、固定 Node 构建，以及完整 tar 构建/临时测试密钥签名/实际插件载荷检查；CI 不依赖正式发布密钥，也不上传测试签名工件。`release.yml` 使用正式信任材料校验并上传候选工件，不自动公开发布。2026-09-27 已完成 CLI workflow 授权，`4064fee` 的 [GitHub run 36287241862](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36287241862) 四项检查全部通过。按用户最新要求，正式分发使用 GitHub Releases，`toolchain.json` 的 `mirror: null` 允许生成正式签名候选，无需游戏服务器提供下载。正式公钥和 main 限定的 release 环境 secret 已配置；代码进入 main 后仍需实跑正式签名，并验证实际 GitHub Release 资产下载。已完成的本机/服务器验证及未测项目以[交付状态](10-reports/2026-09-27/beginner-delivery-status.md)为准。
+
+`tools/testing/onboarding_recovery_smoke.py --release-panel <已验证解包目录>/panel --official-cache <固定官方下载包.zip>` 使用实际 HTTP、新进程、Docker 和候选插件载荷测试下载断线后的向导恢复。需先准备 `python:3.12-slim` 镜像和开发依赖；游戏是协议夹具，下载失败后的重试改用本地缓存镜像，不验证外部镜像可用性。所有容器使用唯一项目和 localhost 端口，结束后只清理自己创建的容器/镜像，证据目录保留。
+
+## 手动部署到现有服务器
+
+以下为已有 LinuxGSM 安装的高级部署路径；通过 get.sh 管理的实例应使用同一已签名安装器更新。服务器上没有 git，先将代码同步至临时目录，再按当前授权安排切换。
 
 1. 本机：`cd frontend && npm run build`；`cd panel && python3 -m pytest` 全绿。
 2. 同步到服务器的临时目录（不直接覆盖，先备份）：
    ```bash
    rsync -az --delete --exclude venv --exclude devenv --exclude tests --exclude requirements-dev.txt --exclude pyproject.toml \
-     --exclude panel.json --exclude 'panel.db*' --exclude '*.pem' --exclude downloads --exclude workshop_tmp --exclude config_backups/ --exclude docker/ \
+     --exclude panel.json --exclude 'panel.db*' --exclude '*.pem' --exclude downloads --exclude workshop_tmp --exclude config_backups/ --exclude pack_state/ --exclude basic_state/ --exclude docker/ \
      --exclude __pycache__ --exclude .pytest_cache panel/ <user>@<服务器>:/tmp/panel-deploy/
    ```
 3. 服务器上（有 sudo 的账号）：
    ```bash
    P=/home/l4d2server/panel
    sudo cp -a $P $P.bak-$(date +%Y%m%d-%H%M%S)                       # 整目录备份
-   sudo rsync -a --exclude config_backups/ --exclude docker/ /tmp/panel-deploy/ $P/ && sudo chown -R l4d2server:l4d2server $P
+   sudo rsync -a --exclude panel.json --exclude 'panel.db*' --exclude '*.pem' --exclude downloads/ --exclude workshop_tmp/ --exclude config_backups/ --exclude pack_state/ --exclude basic_state/ --exclude docker/ /tmp/panel-deploy/ $P/ && sudo chown -R l4d2server:l4d2server $P
    sudo -u l4d2server -H bash -c "cd $P && venv/bin/pip install -i https://mirrors.cloud.tencent.com/pypi/simple -r requirements.txt"   # requirements.txt 变了才需要
    sudo systemctl restart l4d2panel && sudo journalctl -u l4d2panel -n 10 --no-pager
-   curl -s http://127.0.0.1:8080/api/setup && curl -sk https://127.0.0.1:8443/ | grep -o 'assets/index-[^"]*\.js'
+   curl --fail http://127.0.0.1:8080/api/health
    ```
    想在切换前先冒烟：拷一份 `panel.json` 把 `port` 改成 18080、`db` 指到 `/tmp`，用 `systemd-run --unit=l4d2panel-acc --uid=l4d2server --gid=l4d2server -p WorkingDirectory=$P $P/venv/bin/python $P/panel.py --config <那份配置>` 起第二个实例打一遍接口，再 `systemctl stop l4d2panel-acc`。
 4. 第一次从单文件版升级：先 `sudo apt install python3-venv`，在 `$P` 里以 l4d2server 执行 `python3 -m venv venv && venv/bin/pip install -r requirements.txt`，把 systemd 单元的 `ExecStart` 改成 `$P/venv/bin/python $P/panel.py` 后 `daemon-reload`。
 
-回滚：停服务，把备份目录换回来，restart。`panel.json` 和 `panel.db` 新旧版本通用；单文件版的 `ExecStart` 是 `/usr/bin/python3 $P/panel.py`。
+切换前确认实际配置、SQLite 数据库及其 WAL/SHM、证书、下载目录、config_backups、pack_state、basic_state 和 Docker 数据均有备份且同步过程不会覆盖；外置配置和自定义路径另行保留。健康检查须核对当前版本、boot、PID 与 systemd MainPID，不能仅检查 HTTP 200。HTTPS 应使用可信 CA 或经独立核对后信任的服务证书验证。
+
+回滚先停面板，恢复匹配的代码和依赖，再校验配置及数据库 schema 兼容性；不要将备份的整库直接覆盖仍包含新数据的当前库，也不能假定任意旧版本均兼容。需要恢复数据库时必须单独安排一致性恢复。get.sh 只切回先前版本与服务单元，保留当前数据库和数据目录；配置启动失败另用 `l4d2panel-recover` 的原文备份恢复路径。
 
 ## 几个设计决定
 
@@ -164,3 +208,11 @@ cd panel && python3 -m pytest          # 约 90 秒
 - **工坊下载自己实现分块续传**：DepotDownloader 对 UGC 文件只发一条 GET、没有重试和续传，国内主机到 Akamai 的单连接速度不稳，大战役经常下不完；见 `integrations/workshop.py` 头部注释。
 - **所有安装途径共用一个门**：`services/addons.py` 的 `install_vpk()`——不是 VPK、想覆盖受保护文件的一律拒收并删除；有效 VPK（包括没有 `maps/*.bsp` 的资源依赖包）都可安装，上传 / zip / 工坊 / DepotDownloader 都走它。地图选择由前端只使用解析出的 `maps/*.bsp`。
 - **后台任务一种形状**：`jobs.py` 里工坊下载和打包共用 `Job`（state / msg / done / total / speed / files / cancel），前端一个 `JobRow` 组件渲染两种。
+
+## 基础设置与加入说明接口
+
+`GET /api/basic-settings` 无写入，返回安装状态、四文件 revision、已保存的名称/地区/人数和 password_set；不返回密码。`POST` 使用 revision 和 `mode=save|apply|save_apply`，逐字段返回 saved/applied/unverified/error/restart_required。密码省略保持、空串清除；apply 不写文件。`POST /runtime` 显式读取运行值，密码保持未确认；`POST /recover` 仅在游戏停止时恢复本面板未完成事务。基础设置与模式、伤害写入共享 SERVER_CFG_LOCK；与安装/启停共享 operation_lock。
+
+多人人数为 4–12，普通 coop 模式限定；内部容量固定 31，min_survivors=4，max_survivors 和 sv_maxplayers 为选定人数。启动 profile 只解析单条固定 panel_capacity 31，无 shell 求值，人数调整需完整重启。受管特感包校验所有预设的特感/Tank预算。服务端运行值匹配不代表第五名真人入服验收通过。
+
+`/api/status.join` 返回规范化 address/command、外部 port、engine_port、错误和固定 public_access=unverified。JoinServerCard 供向导、游戏页和页脚共用，复制说明不含任何实际秘密；不从未经校验的 display_host 直接拼接控制台命令。无端口域名自动补游戏端口，IPv6 括号化，显式端口仅保留一次。

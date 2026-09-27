@@ -72,7 +72,7 @@ if [[ -n $OFFLINE ]]; then
     cp -- "$OFFLINE/$name" "$WORK/assets/$name"
   done
 elif ! download "$PRIMARY"; then
-  [[ -n $MIRROR ]] || fail '官方源不可达，且此发布脚本没有已配置的国内镜像'
+  [[ -n $MIRROR ]] || fail 'GitHub 下载失败。请检查网络后重试，或使用 --mirror HTTPS根地址 / --offline-dir 已下载的完整签名发布目录；仍须通过签名校验。'
   echo '官方源下载失败，使用已配置镜像；仍执行相同签名校验。'
   download "$MIRROR" || fail '官方源和镜像均下载失败'
 fi

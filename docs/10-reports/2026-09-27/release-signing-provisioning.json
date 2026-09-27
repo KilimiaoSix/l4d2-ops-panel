@@ -1,0 +1,19 @@
+{
+  "key_type": "RSA-3072",
+  "spki_der_sha256": "0e29c5f28d26e1e71b12d7b4d8c49e4d4374efc3d079b4fe16943b3169ea353d",
+  "private_directory_mode": "0o700",
+  "private_file_mode": "0o600",
+  "local_challenge_verified": true,
+  "public_key": "tools/release/release-public.pem",
+  "production_release_published": false,
+  "github_environment": "release",
+  "github_repository": "KilimiaoSix/l4d2-ops-panel",
+  "allowed_ref": "main branch only",
+  "secret_metadata": [
+    {
+      "name": "RELEASE_SIGNING_PRIVATE_KEY",
+      "updatedAt": "2026-09-26T21:57:38Z"
+    }
+  ],
+  "workflow_run_verified": false
+}
