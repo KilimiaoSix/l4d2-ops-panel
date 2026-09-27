@@ -118,7 +118,7 @@ python3 -m tests.docker_smoke --keep   # 同样验证，完成后保留本地面
 
 ## 测试
 
-新手化改造的配置底座与验收记录见 [实施记录](10-reports/2026-09-27/beginner-implementation-progress.md)。`build_context(settings, base_dir, conf)` 的第三个参数必须是实际启动配置文件；进程内 fixture 也应写入该文件。
+新手化改造的配置底座与验收记录见 [实施记录](10-reports/2026-09-27/beginner-delivery-status.md)。`build_context(settings, base_dir, conf)` 的第三个参数必须是实际启动配置文件；进程内 fixture 也应写入该文件。
 
 `GET/POST /api/panel-config` 仅 owner 可用。POST 使用 `{revision,updates,restart}`；名称、显示地址、上传上限、Steam Key 即时更新，其余允许字段先确认重启。旧的未知 JSON 键保留，新更新的未知/非白名单键拒绝；秘密只返回 set 标记。配置外部修改与待重启任务冲突返回 409。`GET/POST /api/onboarding` 将向导步骤和非秘密草稿保存到 panel_state；完成时检查游戏安装、最小插件包和待确认重启，重新打开保留草稿。外部客户端入服仍单独标为未验证。
 
