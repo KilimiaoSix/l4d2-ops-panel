@@ -1,0 +1,21 @@
+[Unit]
+Description=Lightweight L4D2 performance sampler
+After=network.target
+
+[Service]
+Type=simple
+User=l4d2server
+Group=l4d2server
+Environment=L4D2_HOME=/home/l4d2server
+WorkingDirectory=/home/l4d2server
+ExecStart=/bin/bash /home/l4d2server/tools/perf-sampler.sh
+Restart=on-failure
+RestartSec=60
+TimeoutStopSec=6
+Nice=10
+IOSchedulingClass=idle
+UMask=0027
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Bound L4D2 console log storage
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/logrotate --state /var/lib/logrotate/l4d2-ops.status /etc/l4d2-ops-logrotate.conf
+Nice=19
+IOSchedulingClass=idle

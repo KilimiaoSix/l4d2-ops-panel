@@ -202,6 +202,8 @@ python tools/testing/bootstrap_vm.py stop --codename jammy
 
 ## 几个设计决定
 
+LinuxGSM 的独立采样器见 [tools/operations](../tools/operations/README.md)。它复用 RconClient，每 15 秒查询 status/stats，空服或失败退避至 60 秒；CSV 七列契约保持，单文件 4 MiB、两份历史。systemd 管理单实例，控制台日志独立定时轮转；不再通过 tmux 开启 profiler 或扫描完整控制台。对应真实 TCP 协议与 CSV 消费者测试：`cd panel && python -m pytest tests/unit/test_perf_sampler.py -q`。该运维组件不由新手 Docker 安装器重复启动。
+
 - **API 契约不随重构变**：路径、JSON、状态码、cookie 名和 `{error}` 错误体都由对齐套件钉死，所以前后端可以分开改；新增字段随意，删改要先动测试。
 - **RCON 每条命令新建连接**：srcds 会掐掉空闲的 RCON 连接、多连接并存时应答会乱序，面板一分钟几条命令，连接 + 认证的开销可以忽略；`features`（120 s）和 game flags（15 s）两层缓存把 `/api/status` 每 10 秒一次的轮询压到几乎不发 RCON。
 - **A2S 被限流时用 RCON `status` 兜底**：L4D2 对 A2S 有速率限制，公网服务器一直被扫，单次查询经常撞到限流窗口；进程还在（`pgrep srcds_linux`）就改用 RCON 数人，`degraded: true` 标出来。

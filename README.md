@@ -139,7 +139,7 @@ Docker 控制台取容器日志；性能通过 RCON 的 `stats` / `status` 读�
 
 - `sourcemod/scripting/sipreset.sp` — 特感强度预设 `!preset auto|te8|te12|te16`，基于 [Infected Bots](https://github.com/fbef0102/L4D1_2-Plugins/tree/master/l4dinfectedbots) 的 `l4d_infectedbots_read_data` 切换数据文件；数据文件用 `tools/gen_ib_presets.py` 生成
 - `sourcemod/scripting/sm_whitelist.sp` — 无密码私人服白名单：`!wl_add` `!wl_addid` `!wl_del` `!wl_list`，管理员自动放行，名单为空 = 对所有人开放，开关状态持久化
-- `tools/perf-sampler.sh` — 有人在线时每 15 秒记录 `stats`（fps / 流量），面板画曲线
+- `tools/perf-sampler.sh` + `perf-sampler.py` — 有人在线时每 15 秒通过只读 RCON 记录性能，空服降频；不常驻 profiler，不扫描控制台，CSV 自动限量保留。[部署与回滚说明](tools/operations/README.md)
 - 难度切换会额外执行 `l4d2_force_difficulty <难度>`，供本地的 Force Difficulty 插件跨换图锁定难度（该插件暂未收录进本仓库）；没装时这条命令的报错被忽略，不影响 `z_difficulty` 的设置
 - `docs/l4d2-server-notes.md` — L4D2 开服踩坑笔记（cfg 不能有非 ASCII、SteamCMD 匿名下载 bug、SourceMod 在 L4D2 上的几个不触发……）
 

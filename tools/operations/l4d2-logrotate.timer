@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly L4D2 log rotation check
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=120
+Persistent=true
+Unit=l4d2-logrotate.service
+
+[Install]
+WantedBy=timers.target
