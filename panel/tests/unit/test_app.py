@@ -11,7 +11,7 @@ from tests.conftest import OWNER_PW, OWNER_USER, RCON_PASSWORD
 
 @pytest.fixture
 def app_ctx(tmp_path, game_dir, fake_game, fake_steam):
-    lgsm = tmp_path / 'lgsm'; lgsm.write_text('#!/bin/bash\necho ok\n'); lgsm.chmod(0o755)
+    lgsm = tmp_path / 'lgsm'; lgsm.write_text('#!/bin/bash\nsleep 0.2\necho ok\n'); lgsm.chmod(0o755)
     s = Settings(password=OWNER_PW, db=str(tmp_path / 'panel.db'), rcon_host='127.0.0.1', rcon_port=fake_game.port, rcon_password=RCON_PASSWORD,
                  game_dir=str(game_dir.root), lgsm_script=str(lgsm), console_log='', perf_csv='', depotdownloader='',
                  steam_api_base=fake_steam.base, steam_community_base=fake_steam.base)
@@ -43,6 +43,10 @@ def test_every_write_is_audited(app_ctx, fake_game, fake_steam):
              ('/api/plugins', {'op': 'reload', 'file': 'myplugin'})]
     for path, body in calls:
         r = c.post(path, json=body); assert r.status_code == 200, (path, r.text)
+        if path == '/api/action':
+            assert ctx.server.operation_lock.acquire(timeout=5), ctx.server.state
+            ctx.server.operation_lock.release()
+            assert ctx.server.state['running'] is None
     actions = [a['action'] for a in ctx.audit.recent()]
     for a in ('login', 'rcon', 'game.preset', 'game.difficulty', 'game.damage', 'game.map', 'game.points', 'game.kick', 'whitelist.add', 'whitelist.del',
               'whitelist.enable', 'addon.delete', 'addon.workshop', 'addon.zip', 'server.monitor', 'plugin.reload'):
