@@ -1,6 +1,6 @@
-# 发布签名与工具链（实施中）
+# 发布签名与工具链
 
-版本化安装脚本由 `tools/release/render_bootstrap.py` 从 `get.sh.in` 生成，内嵌受信任公钥和固定版本。源码模板不能直接当作安装脚本执行。工具链版本记录在 `tools/release/toolchain.json`。按用户 2026-09-27 的决定，发布资源由本仓库 GitHub Releases 托管，不使用游戏服务器提供下载。`mirror: null` 是默认且可用的配置。[2.1.0-candidate.11 测试预览](https://github.com/KilimiaoSix/l4d2-ops-panel/releases/tag/v2.1.0-candidate.11) 已由 main 上的正式签名工作流生成、在本机独立验签并公开上传五个资产；稳定版本仍需真人验收后发布。
+版本化安装脚本由 `tools/release/render_bootstrap.py` 从 `get.sh.in` 生成，内嵌受信任公钥和固定版本。源码模板不能直接当作安装脚本执行。工具链版本记录在 `tools/release/toolchain.json`。按用户 2026-09-27 的决定，发布资源由本仓库 GitHub Releases 托管，不使用游戏服务器提供下载。`mirror: null` 是默认且可用的配置。[2.1.0 正式版](https://github.com/KilimiaoSix/l4d2-ops-panel/releases/tag/v2.1.0) 已由 main 上的正式签名工作流生成、在本机和服务器独立验签并核对五个公开资产。用户于 2026-09-28 授权在剩余真人满员验收前正式发布；未测范围继续保留于验收记录。
 
 每个版本的 Release 上传五个独立资产：`get.sh`、`l4d2-panel-linux-x86_64.tar.gz`、`VERSION`、`SHA256SUMS`、`SHA256SUMS.sig`。脚本使用本仓库的 `/releases/download/v<版本>/` 路径取得同一版本的资产；GitHub 自动生成的 Source code 压缩包不含构建产物，不能作为安装包。GitHub 支持将构建好的软件附加为 [Release 资产](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)。
 
@@ -23,3 +23,12 @@ Docker 安装使用 [官方签名 apt 仓库](https://docs.docker.com/engine/ins
 官方 Docker 软件源下载失败时回退到[清华 Docker CE 镜像](https://mirrors.tuna.tsinghua.edu.cn/help/docker-ce/)。两个来源取得的公钥必须匹配上述固定哈希，APT 仍检查 Docker 的 Release 签名和包哈希；公钥变更立即停止，不通过关闭校验解决网络问题。这是 Docker 软件包源，独立于面板发布镜像和游戏容器镜像。
 
 高级路径 `panel/install.sh` 由原游戏服务用户执行：已有 `panel.json` 验证后保持原文；首次配置时回车取默认值，可选项输入 `-` 清空，密码使用隐藏输入。旧服务单元保持原样，新建服务含 `RestartPreventExitStatus=78`。证书使用实际 IP/DNS SAN，已有证书不替换；输出证书指纹供核对。
+
+## 2.1.0 正式版
+
+源码提交 `34b9f61354dd47ce74f89ce2fcee7f8a828c888f`；[CI 36334541944](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36334541944) 的 Python 3.10/3.12 各 545 项、前端构建及实际发布包 11 项检查通过。[签名运行 36334541763](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36334541763) 成功，公开前比对 GitHub 返回的五个资产摘要与本地文件一致。
+
+- [get.sh](https://github.com/KilimiaoSix/l4d2-ops-panel/releases/download/v2.1.0/get.sh)：SHA256 `3b9db34d6cdc4af6b5be7acc9d1d33660a98b7247b0b6ce17baf3435f287622b`
+- [Linux x86_64 安装包](https://github.com/KilimiaoSix/l4d2-ops-panel/releases/download/v2.1.0/l4d2-panel-linux-x86_64.tar.gz)：SHA256 `85f58a150e43a796144a969352b07170b4ebf5b5b228895e1a283e7ded82e19b`
+
+正式包在既有 LinuxGSM 服务器完成 14 项隔离预检和生产切换；切换仅替换面板代码并添加两个面板辅助插件，保留账号、原有配置、地图和插件，游戏进程保持运行。单名真人正确/错误密码已验证；第五名真人、8/12 人满员、重连及清空密码后的真人登录仍待补验，不能视作全部插件组合均已验证。

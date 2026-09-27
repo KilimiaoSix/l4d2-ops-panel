@@ -149,7 +149,7 @@ cd panel && python3 -m pytest          # 运行时间取决于主机；当前全
 
 夹具在 `tests/conftest.py`（临时 game_dir、面板子进程、登录好的 httpx client）和 `tests/fakes/`（`game.py`、`steam.py`、`vpk.py`）。用 `@pytest.mark.panel(key=value)` 覆盖某个用例的 panel.json，`@pytest.mark.game(a2s_challenge=True)` 调假游戏。
 
-## 候选构建与引导验证
+## 发布构建与引导验证
 
 固定依赖、签名格式、首次信任、镜像和密钥轮换见 [发布签名说明](release-signing.md)。`tools/release/build.py` 构建前端并使用固定 SourceMod 编译器生成插件，`tests.pack_release_smoke` 消费实际 tar 中的文件和清单。L4DToolZ 由安装器从固定官方版本下载并验证 SHA256，不包含在 tar 中。
 
@@ -170,6 +170,8 @@ python tools/testing/bootstrap_vm.py stop --codename jammy
 ```
 
 `.github/workflows/ci.yml` 配置 Python 3.10.20/3.12.13 回归、固定 Node 构建，以及完整 tar 构建/临时测试密钥签名/实际插件载荷检查；CI 不依赖正式发布密钥，也不上传测试签名工件。`release.yml` 使用正式信任材料校验并上传候选工件，不自动公开发布。2026-09-27 已完成 CLI workflow 授权；main 的提交 `26dcd33` 在 [run 36288551619](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36288551619) 四项通过，两套 Python 各 528 项。随后 [run 36288569886](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36288569886) 使用 release 环境 secret 完成正式密钥签名，独立验签后发布 candidate.11 测试预览版。Ubuntu 22.04/24.04 已从公开 GitHub 地址完成在线安装和登录检查。`toolchain.json` 的 `mirror: null` 是受支持默认值，无需游戏服务器提供下载。用户已合并 PR #1，并授权后续直接合入 main，无需新 PR。完整验证范围及真人未测项目以[交付状态](10-reports/2026-09-27/beginner-delivery-status.md)为准。
+
+2026-09-28 已发布 [2.1.0 正式版](https://github.com/KilimiaoSix/l4d2-ops-panel/releases/tag/v2.1.0)：main `34b9f61` 的 [CI 36334541944](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36334541944) 两套 Python 各 545 项通过；[签名运行 36334541763](https://github.com/KilimiaoSix/l4d2-ops-panel/actions/runs/36334541763) 通过，资产在本地和目标服务器独立验签。生产切换保留既有 LinuxGSM 和全部非托管插件，添加 hostname/password 辅助插件及启动恢复退出码配置。用户已授权提前上线；真人满员验收继续开放，生产部署不等于完成全部游玩验收。
 
 `tools/testing/onboarding_recovery_smoke.py --release-panel <已验证解包目录>/panel --official-cache <固定官方下载包.zip>` 使用实际 HTTP、新进程、Docker 和候选插件载荷测试下载断线后的向导恢复。需先准备 `python:3.12-slim` 镜像和开发依赖；游戏是协议夹具，下载失败后的重试改用本地缓存镜像，不验证外部镜像可用性。所有容器使用唯一项目和 localhost 端口，结束后只清理自己创建的容器/镜像，证据目录保留。
 

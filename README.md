@@ -6,17 +6,17 @@ Left 4 Dead 2 专用服务器的 Web 运维面板。**FastAPI 后端 + Vue 3 前
 
 这份 README 面向装面板、用面板的人。想改代码、跑测试、了解结构，看 [docs/development.md](docs/development.md)；开服本身的踩坑在 [docs/l4d2-server-notes.md](docs/l4d2-server-notes.md)。
 
-## 新手开服入口（候选验证中）
+## 新手开服入口
 
 新安装流程面向 **Ubuntu 22.04 / 24.04、x86_64、systemd**：签名安装包自动准备 Docker、Compose、专用服务用户、Python 环境和 HTTPS 面板，随后在网页“开服向导”中完成游戏安装、插件选择、基础设置和加入说明。服务器不需要 Node.js。安装脚本、压缩包和签名由本仓库 **GitHub Releases** 托管，无需另外提供下载服务器；网络不通时支持显式镜像或完整签名包的离线安装。
 
-现可使用 [2.1.0-candidate.12 测试预览版](https://github.com/KilimiaoSix/l4d2-ops-panel/releases/tag/v2.1.0-candidate.12)，Release 页面提供固定版本安装命令和脚本 SHA256。该预览使用正式发布密钥签名，并修复进服密码兼容问题；第五名玩家、8/12 人满员与重连仍待验收，尚未发布稳定版本。请下载 Release 资产，源码里的 `get.sh.in` 和 GitHub 自动生成的 Source code 压缩包不能直接安装。已有 LinuxGSM 服务器继续使用下方高级安装路径，安装器不会接管同名旧服务或游戏目录。
+现可使用 [2.1.0 正式版](https://github.com/KilimiaoSix/l4d2-ops-panel/releases/tag/v2.1.0)，Release 页面提供固定版本安装命令和脚本 SHA256。该版本使用正式发布密钥签名，并修复进服密码兼容问题；已完成安装、面板和单人进服验证，第五名玩家、8/12 人满员与重连仍待真人验收。请下载 Release 资产，源码里的 `get.sh.in` 和 GitHub 自动生成的 Source code 压缩包不能直接安装。已有 LinuxGSM 服务器继续使用下方高级安装路径，安装器不会接管同名旧服务或游戏目录。
 
 拿到正式签名发布包后，运行其中的 `sudo bash get.sh --offline-dir <发布包目录> --host <域名或IP>`；在线安装使用同一份受信任 `get.sh`，无需 `--offline-dir`。安装完成会输出随机初始账号密码、面板地址与证书指纹。核对证书后登录，不必提前创建游戏目录。发布来源与签名说明见 [release-signing.md](docs/release-signing.md)，当前实测范围见 [实施验收记录](docs/10-reports/2026-09-27/beginner-delivery-status.md)。
 
 向导默认最小插件包（Metamod、SourceMod、白名单、中文服名、进服密码）；多人合作、特感预设、积分可分别选装或以后补装。L4DToolZ 2.5.1 安装时从官方固定版本下载并核对 SHA256，不随面板发布包内置。安装文件与插件实际加载状态分别显示；多人容量变更需完整重启游戏并核对运行值。
 
-candidate.11 的原生密码弹窗可能输入后卡住。请更新到 candidate.12，在插件页更新最小插件包 v2 并重启游戏；朋友按加入说明使用 `setinfo l4d2_password`。正式签名包已通过 42 项实服检查，包含密码设置/清除、重启、空服换图和 UDP；完整真人验收仍在继续。
+candidate.11 的原生密码弹窗可能输入后卡住。请更新到 2.1.0，在插件页更新最小插件包 v2 并重启游戏；朋友按加入说明使用 `setinfo l4d2_password`。正式签名包已通过 42 项实服检查，包含密码设置/清除、重启、空服换图和 UDP；完整真人验收仍在继续。
 
 基础设置支持 UTF-8 中文服名、地区、进服密码和合作人数。保存文件与当前生效分别显示；进服密码不会回显，保护型密码变量无法从 RCON 证明客户端认证结果。工作版已验证单名真人正确密码进入、错误密码拒绝；4/8/12 人已验证服务端配置和换图保持，第五名真人与满员游玩仍待验收。“邀请朋友”提供控制台连接命令；公网游戏端口需要放行 **UDP**，同机 RCON 管理的 TCP 可仅绑定本机。面板可访问不等于游戏公网可连接。
 
