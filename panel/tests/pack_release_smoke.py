@@ -43,7 +43,7 @@ def main():
     transaction.install(minimal, {'minimal': {'version': registry.packs['minimal']['version']}}, job)
     check('minimal file progress and receipt', job.done == job.total == len(minimal) and set(transaction.receipt()['packs']) == {'minimal'})
     check('complete SourceMod addons and cfg installed', (game / 'addons/sourcemod/bin/sourcemod.2.l4d2.so').is_file() and (game / 'cfg/sourcemod/sourcemod.cfg').is_file())
-    check('hostname and whitelist are real compiled plugins', all((game / ('addons/sourcemod/plugins/' + n + '.smx')).read_bytes()[:4] == b'FFPS' for n in ('panel_hostname', 'sm_whitelist', 'sipreset')))
+    check('minimal package contains real compiled plugins', all((game / ('addons/sourcemod/plugins/' + n + '.smx')).read_bytes()[:4] == b'FFPS' for n in ('panel_hostname', 'panel_join_password', 'sm_whitelist', 'sipreset')))
     check('minimal does not install multiplayer or points', not (game / 'addons/l4dtoolz.so').exists() and not (game / 'addons/sourcemod/plugins/l4d2_points_system.smx').exists())
     downloads = directory / 'downloads'; pinned = downloads / 'l4dtoolz/official.zip'; pinned.parent.mkdir(parents=True)
     official = root / '.release-cache/l4dtoolz-2.5.1-main.zip'

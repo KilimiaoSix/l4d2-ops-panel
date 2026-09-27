@@ -29,6 +29,10 @@ def test_multi_file_save_clear_password_and_no_secret_readback(config):
     assert b'panel_capacity 31' in (config.game / CAPACITY).read_bytes()
     config.save(read['revision'], {'password': 'new secret'})
     assert config.read()['password_set']
+    server = (config.game / SERVER).read_bytes()
+    assert b'sv_password "new secret"' in server
+    assert b'sm_panel_join_password "new secret"' in server
+    assert b'sv_allow_lobby_connect_only "0"' in server
     assert not config.save(config.read()['revision'], {'password': 'new secret'})['changed']
 
 

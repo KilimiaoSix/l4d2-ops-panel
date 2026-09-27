@@ -39,7 +39,7 @@ def test_missing_conflicting_and_unavailable_payloads(registry):
 def test_normalized_payload_and_symlink_validation(registry, tmp_path):
     path = 'addons/sourcemod/plugins/example.smx'; root = registry.root / 'payloads/minimal'
     file = root / path; file.parent.mkdir(parents=True); file.write_bytes(b'FFPS-test')
-    index = {'schema': 1, 'payloads': {'minimal': {'version': '1', 'files': [{'path': path, 'sha256': digest(file.read_bytes()), 'policy': 'managed'}]}}}
+    index = {'schema': 1, 'payloads': {'minimal': {'version': '2', 'files': [{'path': path, 'sha256': digest(file.read_bytes()), 'policy': 'managed'}]}}}
     (registry.root / 'payload-manifest.json').write_bytes(json_bytes(index))
     result = registry.files(['minimal']); assert result[0]['source'] == file
     outside = tmp_path / 'other'; outside.write_bytes(file.read_bytes()); file.unlink(); file.symlink_to(outside)

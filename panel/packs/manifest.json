@@ -16,8 +16,8 @@
     {
       "id": "minimal",
       "name": "最小插件包",
-      "summary": "Metamod、SourceMod、白名单、中文服名；附带特感预设工具，安装特感包后才可用。",
-      "version": "1",
+      "summary": "Metamod、SourceMod、白名单、中文服名、进服密码；附带特感预设工具，安装特感包后才可用。",
+      "version": "2",
       "required": true,
       "default": true,
       "visible": true,
@@ -31,7 +31,8 @@
       ],
       "probes": [
         "Private Whitelist",
-        "Panel Hostname"
+        "Panel Hostname",
+        "Panel Join Password"
       ],
       "upstreams": [
         "metamod",

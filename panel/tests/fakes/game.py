@@ -78,12 +78,13 @@ class FakeGame:
         self.password, self.whitelist_path, self.a2s_challenge = password, str(whitelist_path) if whitelist_path else None, a2s_challenge
         self.a2s_on = True; self.commands = []; self.status_text = STATUS_BUSY; self.auth_failures = 0
         self.state = {'preset': 'te12', 'difficulty': 'Normal', 'cvars': dict(mp_gamemode='coop', sm_whitelist_enable='1', **DAMAGE_CVARS)}
-        self.state['cvars'].update(hostname='test server', sv_password='', sv_region='255', sv_setmax='31',
+        self.state['cvars'].update(hostname='test server', sv_password='', sm_panel_join_password='', sv_region='255', sv_setmax='31',
             sv_maxplayers='4', l4d_multislots_max_survivors='4', l4d_multislots_min_survivors='4',
             sv_force_unreserved='1', sv_allow_lobby_connect_only='0')
         self.hostname_path = Path(whitelist_path).parent.parent / 'data/panel_hostname.txt' if whitelist_path else None
         self.hostname_mismatch = False
         self.hostname_enabled = True
+        self.password_enabled = True
         self.cvar_overrides = {}
         self.missing_cvars = set()
         self._lock = threading.Lock()
@@ -142,6 +143,9 @@ class FakeGame:
         s = self.state; cmd = cmd.strip()
         if cmd == 'status': return self.status_text
         if cmd == 'sm plugins list': return PLUGINS_LIST
+        if cmd == 'sm_panel_password_status':
+            if not self.password_enabled: return 'Unknown command "sm_panel_password_status"'
+            return f'PANEL_PASSWORD ready=1 required={int(bool(s["cvars"]["sm_panel_join_password"]))}'
         if cmd in ('sm_panel_hostname_reload', 'sm_panel_hostname_status'):
             if not self.hostname_enabled: return 'Unknown command "sm_panel_hostname_status"'
             try: name = self.hostname_path.read_text(encoding='utf-8').rstrip('\n')
@@ -160,7 +164,7 @@ class FakeGame:
         if m:
             name = m.group(1)
             if name not in s['cvars'] or name in self.missing_cvars: return f'[SM] Unable to find cvar: {name}'
-            value = '***PROTECTED***' if name == 'sv_password' else s['cvars'][name]
+            value = '***PROTECTED***' if name in ('sv_password', 'sm_panel_join_password') else s['cvars'][name]
             return f'[SM] Value of cvar "{name}": "{value}"'
         m = re.fullmatch(r'(?:sm_cvar )?([a-zA-Z0-9_]+) (?:"([^"\r\n]*)"|([^\s"]+))', cmd)
         if m and (cmd.startswith('sm_cvar ') or m.group(1) in s['cvars']):
@@ -171,7 +175,7 @@ class FakeGame:
             return ''
         if cmd in s['cvars']:
             if cmd in self.missing_cvars: return f'Unknown command "{cmd}"'
-            value = '***PROTECTED***' if cmd == 'sv_password' else s['cvars'][cmd]
+            value = '***PROTECTED***' if cmd in ('sv_password', 'sm_panel_join_password') else s['cvars'][cmd]
             return f'"{cmd}" = "{value}"\n game replicated\n - factor'
         m = re.fullmatch(r'sm_wl_addid (\S+)(?: "(.*)")?', cmd)
         if m: self._wl_add(m.group(1), m.group(2) or ''); return f'[SM] 已加入白名单: {m.group(1)}'

@@ -22,6 +22,7 @@ _VALUES = {
     'mp_gamemode': rb'"[A-Za-z0-9_]+"|[A-Za-z0-9_]+',
     'hostname': _SAFE_STRING,
     'sv_password': _SAFE_STRING,
+    'sm_panel_join_password': _SAFE_STRING,
     'sv_region': rb'"[0-9]+"|[0-9]+',
     'sv_maxplayers': rb'"-?[0-9]+"|-?[0-9]+',
     'sv_force_unreserved': rb'"[01]"|[01]',

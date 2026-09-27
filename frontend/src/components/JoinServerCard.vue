@@ -10,7 +10,7 @@ const join = computed(() => st.value?.join)
 const instructions = computed(() => join.value?.command ? [
   '一起玩 Left 4 Dead 2',
   '1. 在游戏「选项 → 键盘/鼠标」中启用开发者控制台，按 ~ 打开。',
-  '2. 如果服务器有进服密码，先输入 password "朋友单独告知的进服密码"；没有密码则输入 password "" 清除客户端旧密码。',
+  '2. 先输入 password "" 关闭旧的原生密码设置，再输入 setinfo l4d2_password "朋友单独告知的进服密码"；没有密码时输入 setinfo l4d2_password ""。每行按回车。',
   '3. 输入：' + join.value.command,
   '4. 自定义地图请按作品要求，在每位玩家的客户端安装对应内容。',
   '公网连接尚未验证；连接失败请联系服主检查地址、端口和防火墙。',
@@ -43,7 +43,7 @@ async function copy(value: string) {
         <ol>
           <li>确认上方游戏已安装并有本机响应；刚保存人数配置时，请先完整重启游戏。</li>
           <li>确认这个域名或 IP 指向游戏服务器；面板网页端口不能作为游戏连接端口。</li>
-          <li>云服务器安全组和主机防火墙都要放行游戏端口 <strong>{{ join.port }} / TCP 和 UDP</strong>。<template v-if="join.port !== join.engine_port">如果使用端口映射，外部 {{ join.port }} 需要转发到游戏主机 {{ join.engine_port }}。</template></li>
+          <li>云服务器安全组和主机防火墙都要放行游戏端口 <strong>{{ join.port }} / UDP</strong>。TCP 用于 RCON 管理，面板在同机时无需对朋友开放。<template v-if="join.port !== join.engine_port">如果使用端口映射，外部 {{ join.port }} 需要转发到游戏主机 {{ join.engine_port }}。</template></li>
           <li>家庭网络还需设置路由器端口转发；公网地址、运营商 NAT 和 IPv6 支持需要按实际网络确认。</li>
           <li>核对进服密码、服务器白名单和自定义地图依赖。TCP 检测成功也不能证明 UDP 和真实客户端可用。</li>
         </ol>

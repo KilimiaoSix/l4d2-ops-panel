@@ -21,6 +21,7 @@ import uvicorn
 
 from l4d2panel.context import build_context
 from l4d2panel.integrations import game_installer
+from l4d2panel.integrations.a2s import A2SClient
 from l4d2panel.main import create_app
 from l4d2panel.settings import Settings
 
@@ -130,8 +131,11 @@ def main():
             request('/api/install', {'game_port': game_port, 'tick': 30, 'vac': False, 'mirror_url': ''})
             job('/api/install')
         wait(lambda: request('/api/status').get('online'), 240)
-        check('real Docker game install responds via RCON and A2S', request('/api/install')['installed'])
+        check('real Docker game installation metadata is complete', request('/api/install')['installed'])
         outputs['vanilla_status'] = command('status')
+        check('real Docker game responds via RCON', 'hostname:' in outputs['vanilla_status'])
+        outputs['vanilla_a2s'] = wait(lambda: (reply if (reply := A2SClient('127.0.0.1', game_port).query()).get('online') else None), 30)
+        check('real Docker game responds via UDP A2S', outputs['vanilla_a2s']['online'])
         request('/api/plugin-packs/install', {'packs': ['minimal'], 'stop_game': True})
         job('/api/plugin-packs')
         check('minimal installation stops the real game', not ctx.server.running())

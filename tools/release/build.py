@@ -134,7 +134,7 @@ def build_payloads(cache, output, selected=None):
         for name, data in archives['sourcemod'].items():
             target = sm / name; target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
         compiler = sm / 'addons/sourcemod/scripting/spcomp64'; includes = compiler.parent / 'include'
-        for plugin in ('panel_hostname', 'sipreset', 'sm_whitelist'):
+        for plugin in ('panel_hostname', 'panel_join_password', 'sipreset', 'sm_whitelist'):
             source = ROOT / 'sourcemod/scripting' / (plugin + '.sp')
             compiled = compile_plugin(compiler, includes, source, work / (source.stem + '.smx'))
             put(payloads['minimal'], 'addons/sourcemod/plugins/' + source.stem + '.smx', compiled)

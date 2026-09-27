@@ -13,6 +13,7 @@ SERVER = 'cfg/server.cfg'
 HOSTNAME = 'addons/sourcemod/data/panel_hostname.txt'
 MULTISLOTS = 'cfg/sourcemod/l4dmultislots.cfg'
 CAPACITY = 'cfg/panel-capacity.cfg'
+PASSWORD_CVAR = 'sm_panel_join_password'
 FILES = (SERVER, HOSTNAME, MULTISLOTS, CAPACITY)
 CAPACITY_DATA = b'// Panel startup profile, not executed as engine CFG.\npanel_capacity 31\n'
 
@@ -62,7 +63,8 @@ class BasicConfig:
             name = read_name(snapshot[HOSTNAME])
             return {'revision': self.revision(snapshot), 'server_name': name or fallback or '',
                     'hostname_file': name is not None, 'ascii_fallback': fallback or 'L4D2 Server',
-                    'password_set': bool(last_value(server, 'sv_password')),
+                    'password_set': bool(last_value(server, PASSWORD_CVAR) if last_value(server, PASSWORD_CVAR) is not None
+                                         else last_value(server, 'sv_password')),
                     'game_mode': last_value(server, 'mp_gamemode') or 'coop',
                     'region': int(region) if region is not None else 255,
                     'coop_players': int(limit) if limit and 4 <= int(limit) <= 12 else 4,
@@ -80,7 +82,10 @@ class BasicConfig:
                 fallback = updates.get('ascii_fallback', name if name.isascii() else 'L4D2 Server')
                 cvars['hostname'] = fallback
             elif 'ascii_fallback' in updates: cvars['hostname'] = updates['ascii_fallback']
-            if 'password' in updates: cvars['sv_password'] = updates['password']
+            if 'password' in updates:
+                cvars.update(sv_password=updates['password'],
+                             sm_panel_join_password=updates['password'])
+                if updates['password']: cvars['sv_allow_lobby_connect_only'] = '0'
             if 'region' in updates: cvars['sv_region'] = str(updates['region'])
             if 'coop_players' in updates:
                 count = updates['coop_players']

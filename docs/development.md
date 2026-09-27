@@ -213,6 +213,8 @@ python tools/testing/bootstrap_vm.py stop --codename jammy
 
 `GET /api/basic-settings` 无写入，返回安装状态、四文件 revision、已保存的名称/地区/人数和 password_set；不返回密码。`POST` 使用 revision 和 `mode=save|apply|save_apply`，逐字段返回 saved/applied/unverified/error/restart_required。密码省略保持、空串清除；apply 不写文件。`POST /runtime` 显式读取运行值，密码保持未确认；`POST /recover` 仅在游戏停止时恢复本面板未完成事务。基础设置与模式、伤害写入共享 SERVER_CFG_LOCK；与安装/启停共享 operation_lock。
 
+L4D2 原生 `sv_password` 存在密码窗口卡住及查询静默问题（[Valve #3416](https://github.com/ValveSoftware/Source-1-Games/issues/3416)，本轮实机复现）。最小包 v2 的 `panel_join_password.sp` 在 OnClientConnect 读取客户端 `l4d2_password` userinfo；实际密码使用 protected `sm_panel_join_password` 保存。非空密码同时保存原生保护值，插件健康加载才清空原生运行值；卸载/暂停恢复保护。旧 `sv_password` 非空配置可由插件迁移到内存，下一次面板保存改为新字段。插件缺失时拒绝保存非空密码，未加载时返回应用错误；回执仅包含 ready/required，不返回秘密，不替代真人认证验收。此实现不改变 Steam 身份认证。完整加入说明使用 `password ""`、`setinfo l4d2_password "<单独告知的密码>"`、`connect <地址>`。公网游戏需要 UDP；同机 RCON 可只开放本机 TCP。
+
 多人人数为 4–12，普通 coop 模式限定；内部容量固定 31，min_survivors=4，max_survivors 和 sv_maxplayers 为选定人数。启动 profile 只解析单条固定 panel_capacity 31，无 shell 求值，人数调整需完整重启。受管特感包校验所有预设的特感/Tank预算。服务端运行值匹配不代表第五名真人入服验收通过。
 
 `/api/status.join` 返回规范化 address/command、外部 port、engine_port、错误和固定 public_access=unverified。JoinServerCard 供向导、游戏页和页脚共用，复制说明不含任何实际秘密；不从未经校验的 display_host 直接拼接控制台命令。无端口域名自动补游戏端口，IPv6 括号化，显式端口仅保留一次。

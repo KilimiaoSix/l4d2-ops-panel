@@ -1,5 +1,23 @@
 ## ADDED Requirements
 
+### Requirement: B5 L4D2 compatible join password enforcement
+The managed minimal package SHALL enforce join passwords without relying on the broken native L4D2 password dialog and SHALL preserve Steam authentication.
+
+#### Scenario: Join a password protected server
+- **WHEN** a configured client connects with the documented dedicated userinfo password
+- **THEN** the plugin accepts the correct password and rejects missing or incorrect values before gameplay
+- **AND** UDP server queries remain available.
+
+#### Scenario: Password plugin unavailable
+- **WHEN** a password is configured but the plugin is absent, unloaded or paused
+- **THEN** new players cannot enter without password validation
+- **AND** the panel reports the missing capability instead of claiming successful application.
+
+#### Scenario: Empty server changes map
+- **WHEN** the protected server changes map while hibernating with no players
+- **THEN** the last configured password remains enforced while map configuration is pending
+- **AND** native password assignments are transferred to compatible validation without leaving the native dialog enabled.
+
 ### Requirement: B1 Persistent verified Chinese name
 The panel SHALL store valid UTF-8 server names outside engine CFG, support a safe ASCII fallback and verify the actual applied name through the bundled hostname plugin across map changes and restarts.
 

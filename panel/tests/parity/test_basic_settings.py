@@ -7,7 +7,7 @@ from l4d2panel.integrations.basic_config import HOSTNAME
 
 @pytest.fixture
 def basic_game(game_dir):
-    for name in ('steam.inf', 'gameinfo.txt', 'bin/server_srv.so'):
+    for name in ('steam.inf', 'gameinfo.txt', 'bin/server_srv.so', 'addons/sourcemod/plugins/panel_join_password.smx'):
         path = game_dir.root / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b'fixture')
     return game_dir
 
@@ -41,16 +41,41 @@ def test_exact_chinese_name_password_redaction_and_clear(api, panel, basic_game,
     read = document(api)
     assert read['server_name'] == '中文房间 · 一起玩' and read['password_set'] and read['region'] == 4
     assert 'friends only' not in str(read) + str(data) + str(panel.audit())
-    assert fake_game.state['cvars']['sv_password'] == 'friends only'
+    assert fake_game.state['cvars']['sv_password'] == ''
+    assert fake_game.state['cvars']['sm_panel_join_password'] == 'friends only'
     assert basic_game.cfg.read_bytes().isascii()
     assert (basic_game.root / HOSTNAME).read_bytes() == '中文房间 · 一起玩\n'.encode()
     assert save(api, {'region': 255}, 'save').status_code == 200
+    assert 'sm_panel_join_password "friends only"' in basic_game.cfg.read_text()
     assert 'sv_password "friends only"' in basic_game.cfg.read_text()
     assert save(api, {'password': ''}).status_code == 200
-    assert not document(api)['password_set'] and fake_game.state['cvars']['sv_password'] == ''
+    assert not document(api)['password_set'] and fake_game.state['cvars']['sm_panel_join_password'] == ''
     assert save(api, {'password': 'new secret'}, 'save').status_code == 200
     assert document(api)['password_set']
     assert api.get('/api/onboarding').json()['checks']['settings']['ready']
+
+
+def test_password_requires_installed_and_loaded_plugin(api, basic_game, fake_game):
+    plugin = basic_game.root / 'addons/sourcemod/plugins/panel_join_password.smx'
+    plugin.unlink()
+    before = basic_game.cfg.read_bytes(); fake_game.commands.clear()
+    assert save(api, {'password': 'friends'}, 'save').status_code == 409
+    assert basic_game.cfg.read_bytes() == before and fake_game.commands == []
+    plugin.write_bytes(b'fixture'); fake_game.password_enabled = False
+    result = save(api, {'password': 'friends'}).json()
+    assert result['fields']['password']['state'] == 'error'
+    assert fake_game.state['cvars']['sm_panel_join_password'] == ''
+    assert fake_game.state['cvars']['sv_password'] == 'friends'
+    assert save(api, {'password': ''}).json()['fields']['password']['state'] == 'unverified'
+
+
+def test_password_apply_only_preserves_saved_secret(api, basic_game, fake_game):
+    assert save(api, {'password': 'saved'}, 'save').status_code == 200
+    before = basic_game.cfg.read_bytes()
+    result = save(api, {'password': 'temporary'}, 'apply')
+    assert result.status_code == 200 and result.json()['fields']['password']['state'] == 'unverified'
+    assert basic_game.cfg.read_bytes() == before
+    assert fake_game.state['cvars']['sm_panel_join_password'] == 'temporary'
 
 
 @pytest.mark.parametrize('values', [{'password': None}, {'password': 'fakerc0n'}, {'password': 'x;quit'},

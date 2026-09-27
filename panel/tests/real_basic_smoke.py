@@ -20,6 +20,7 @@ import uvicorn
 
 from l4d2panel.context import build_context
 from l4d2panel import __version__
+from l4d2panel.integrations.a2s import A2SClient
 from l4d2panel.integrations.hostname_file import parse_name_receipt
 from l4d2panel.main import create_app
 from l4d2panel.settings import Settings
@@ -76,6 +77,9 @@ def main():
         return request('/api/basic-settings', {'revision': document()['fields']['revision'], 'mode': mode, **values})
     def runtime(names): return request('/api/basic-settings/runtime', {'names': names})['fields']
     def command(value): return ctx.game.rcon.run(value)
+    def password_ready(required):
+        return f'PANEL_PASSWORD ready=1 required={int(required)}' in command('sm_panel_password_status')
+    def udp_ready(): return A2SClient(settings.rcon_host, settings.rcon_port).query()['online']
     def start():
         request('/api/action', {'name': 'start'})
         wait(lambda: parse_name_receipt(command('sm_panel_hostname_status')), 240)
@@ -104,6 +108,8 @@ def main():
             else: raise AssertionError('Package upgrade timed out')
             check('candidate package upgrade preserves edited Points seed', config_path.read_text() == content)
         start()
+        check('initial password state is ready before any live settings update',
+              wait(lambda: password_ready(document()['fields']['password_set']), 30))
         if args.upgrade_packs:
             check('saved Points cfg is automatically loaded', wait(lambda: ctx.basic_settings._cvar('l4d2_points_start') == '43', 30))
         name = '基础设置实机验收 · 合作开黑'
@@ -113,10 +119,29 @@ def main():
         check('HTTP region reads back actual engine value', result['fields']['region']['state'] == 'applied')
         check('password outcome remains unverified and redacted', result['fields']['password']['state'] == 'unverified'
               and join_password not in json.dumps(result) + json.dumps(document()))
+        check('password plugin requires a password while native dialog is off', password_ready(True)
+              and ctx.basic_settings._cvar('sv_password') == '')
+        check('actual UDP query works with join password enabled', wait(udp_ready, 30))
+        command('sv_password "' + join_password + '"')
+        check('native password assignment is migrated without blocking UDP', password_ready(True)
+              and ctx.basic_settings._cvar('sv_password') == '' and wait(udp_ready, 30))
+        command('sm plugins unload panel_join_password')
+        check('unloaded plugin restores the actual secret as native protection',
+              ctx.basic_settings._cvar('sv_password') == join_password)
+        check('applying with unloaded plugin reports error and keeps native protection',
+              save({'password': join_password})['fields']['password']['state'] == 'error'
+              and ctx.basic_settings._cvar('sv_password') == join_password)
+        command('sm plugins load panel_join_password')
+        check('late loaded password plugin recovers without map change', wait(lambda: password_ready(True), 30))
+        # SourceMod 1.12 has no `sm plugins pause` command. Do not mistake its
+        # help output for a successful pause or claim a lifecycle test occurred.
+        outputs['pause_test'] = 'not run: SourceMod CLI has no plugin pause operation; callback reviewed separately'
         check('password omission preserves saved secret', save({'region': 255}, 'save')['saved']
               and document()['fields']['password_set'])
         check('password explicit empty clears saved secret', save({'password': ''})['fields']['password']['state'] == 'unverified'
               and not document()['fields']['password_set'])
+        check('cleared password disables runtime validation and preserves UDP', password_ready(False) and wait(udp_ready, 30))
+        save({'password': join_password})
         for count in (4, 8, 12):
             result = save({'coop_players': count}, 'save')
             check(f'{count} players saved as pending full restart', result['restart_required'])
@@ -127,6 +152,7 @@ def main():
             check(f'{count} players actual six engine cvars after restart', probe['values'] == expected)
             check(f'{count} players clears restart only after readback', not document()['restart_required'])
             check(f'{count} players retains Chinese name after restart', runtime(['server_name'])['server_name']['value'] == name)
+            check(f'{count} players retains password validation and UDP after restart', password_ready(True) and wait(udp_ready, 30))
         # The bounded hook must stop fighting another plugin after eight corrections.
         command('sm_panel_hostname_reload')
         for index in range(10): command(f'hostname "conflicting plugin {index}"')
@@ -140,6 +166,11 @@ def main():
         check('HTTP-saved name survives real map change', True)
         probe = runtime(['coop_players'])['coop_players']; outputs['after_map_change'] = probe
         check('12-player limits survive real map change', probe['values'] == ctx.basic_settings._expected_count(12))
+        check('password validation and UDP survive real map change', password_ready(True) and wait(udp_ready, 30))
+        save({'password': ''})
+        restart()
+        check('cleared password persists after full restart with UDP available',
+              not document()['fields']['password_set'] and password_ready(False) and wait(udp_ready, 30))
         if args.upgrade_packs:
             check('Points saved cfg survives restart and map change', ctx.basic_settings._cvar('l4d2_points_start') == '43')
         onboarding = request('/api/onboarding')

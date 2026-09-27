@@ -120,7 +120,7 @@ onBeforeUnmount(() => { alive = false; generation++ })
         <label>服务器名称<input v-model="form.server_name" @input="draft" autocomplete="off"><span class="mu">{{ bytes }} / 96 UTF-8 字节，中文通常占 3 字节。</span></label>
         <label>ASCII 备用名称<input v-model="form.ascii_fallback" maxlength="96"><span class="mu">中文名称插件未加载时，游戏使用这个名称。</span></label>
         <label>进服密码<select v-model="passwordMode"><option value="keep">保持现状{{ doc.fields.password_set ? '（已设置）' : '（未设置）' }}</option><option value="set">设置新密码</option><option value="clear">清除密码</option></select></label>
-        <label v-if="passwordMode === 'set'">新的进服密码<input v-model="password" type="password" autocomplete="new-password" maxlength="64"><span class="mu">密码不会保存在向导草稿或分享文本中。</span></label>
+        <label v-if="passwordMode === 'set'">新的进服密码<input v-model="password" type="password" autocomplete="new-password" maxlength="64"><span class="mu">需要更新后的最小插件包。朋友使用加入说明中的 setinfo 命令；密码不会保存在向导草稿或分享文本中。</span></label>
         <label>服务器地区<select v-model="form.region" @change="draft"><option v-for="(name, id) in regions" :key="id" :value="Number(id)">{{ name }}</option></select></label>
         <label>合作人数<input v-model.number="form.coop_players" type="number" min="4" max="12" step="1" :disabled="!doc.multiplayer_available || doc.fields.game_mode !== 'coop'" @change="draft"><span class="mu">普通合作支持 4–12 人；额外槽位也为特感和 Tank 留出空间。</span></label>
         <p v-if="!doc.multiplayer_available" class="mu">当前使用原生四人配置。<RouterLink to="/plugins">安装多人合作包</RouterLink>后可调整人数。</p>

@@ -24,7 +24,7 @@ def pack_app(tmp_path, fake_game):
     shutil.copy(ctx.plugin_packs.registry.root / 'manifest.json', root / 'manifest.json')
     name = 'addons/sourcemod/plugins/test.smx'; source = root / 'payloads/minimal' / name
     source.parent.mkdir(parents=True); source.write_bytes(b'FFPS-test')
-    (root / 'payload-manifest.json').write_bytes(json_bytes({'schema': 1, 'payloads': {'minimal': {'version': '1', 'files': [
+    (root / 'payload-manifest.json').write_bytes(json_bytes({'schema': 1, 'payloads': {'minimal': {'version': '2', 'files': [
         {'path': name, 'sha256': digest(source.read_bytes()), 'policy': 'managed'}]}}}))
     ctx.plugin_packs.registry = PackRegistry(root)
     ctx.server.running = lambda: False
@@ -111,7 +111,7 @@ def test_pending_prevents_start_and_recovery_is_explicit(pack_app):
 def test_actual_source_plugin_titles_satisfy_runtime_probes(pack_app):
     # Titles captured from build 10097 in the isolated real-game Docker test.
     ctx, client = pack_app
-    names = ['Private Whitelist', 'Panel Hostname', 'SI Preset',
+    names = ['Private Whitelist', 'Panel Hostname', 'Panel Join Password', 'SI Preset',
              '[L4D1 & L4D2] CreateSurvivorBot', '[L4D(2)] MultiSlots Improved',
              '[L4D1/2] Manual-Spawn Special Infected', '[L4D2]Zombie Spawn Fix',
              '[L4D & 2] Unrestrict Panic Battlefield', '[L4D & L4D2] Left 4 DHooks Direct',

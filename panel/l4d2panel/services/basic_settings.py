@@ -2,13 +2,14 @@
 import re
 
 from ..errors import ApiError
-from ..integrations.basic_config import BasicConfig
+from ..integrations.basic_config import BasicConfig, PASSWORD_CVAR
 from ..integrations.game_mode_config import ModeConfigError
 from ..integrations.hostname_file import canonical_name, parse_name_receipt
 from ..integrations.pack_files import PackError, safe_file
 from ..integrations.sm_files import read_rcon_password, SERVER_CFG_LOCK
 
 FIELDS = {'server_name', 'ascii_fallback', 'password', 'region', 'coop_players'}
+PASSWORD_PLUGIN = 'addons/sourcemod/plugins/panel_join_password.smx'
 MULTIPLAYER_FILES = ('addons/l4dtoolz.so', 'addons/l4dtoolz.vdf',
     'addons/sourcemod/plugins/l4dmultislots.smx', 'addons/sourcemod/plugins/l4d_CreateSurvivorBot.smx',
     'addons/sourcemod/plugins/left4dhooks.smx')
@@ -58,6 +59,8 @@ class BasicSettingsService:
             if not safe_ascii(value, empty=True): raise ApiError(400, '进服密码最多 64 个安全 ASCII 字符；留空表示清除')
             rcon_password = self.settings.rcon_password or read_rcon_password(self.paths.server_cfg)
             if value and value == rcon_password: raise ApiError(400, '进服密码不能与 RCON 管理密码相同')
+            if value and not safe_file(self.paths.game, PASSWORD_PLUGIN).is_file():
+                raise ApiError(409, '请先在插件页安装或更新最小插件包，以支持 L4D2 进服密码')
         if 'region' in values and (type(values['region']) is not int or values['region'] not in (*range(8), 255)):
             raise ApiError(400, '地区必须为 0–7 或 255')
         if 'coop_players' in values and (type(values['coop_players']) is not int or not 4 <= values['coop_players'] <= 12):
@@ -172,10 +175,20 @@ class BasicSettingsService:
                         elif name == 'ascii_fallback':
                             field.update(state='saved' if saved else 'unverified', message='备用名称在引擎读取配置时使用')
                         elif name == 'password':
-                            out = self.rcon.run('sv_password "' + value + '"')
-                            if re.search(r'unknown command|unable to|cannot|can.t change', out, re.I):
-                                field.update(state='error', message='游戏拒绝了进服密码设置')
-                            else: field.update(state='unverified', message='命令已发送；游戏隐藏密码，请用客户端验证')
+                            receipt = self.rcon.run('sm_panel_password_status')
+                            if not re.search(r'PANEL_PASSWORD ready=[01] required=[01]', receipt):
+                                if value:
+                                    self.rcon.run('sv_password "' + value + '"')
+                                    field.update(state='error', message='进服密码插件未加载，已请求启用原生密码保护；请更新最小包并重启游戏')
+                                else:
+                                    self.rcon.run('sv_password ""')
+                                    field.update(state='unverified', message='已请求清除原生密码，请用客户端验证')
+                            else:
+                                self.rcon.run(PASSWORD_CVAR + ' "' + value + '"')
+                                receipt = self.rcon.run('sm_panel_password_status')
+                                expected = f'PANEL_PASSWORD ready=1 required={int(bool(value))}'
+                                field.update(state='unverified' if expected in receipt else 'error',
+                                    message='密码校验已配置；请用 setinfo l4d2_password 后进服验证' if expected in receipt else '插件未确认密码校验配置，请检查游戏')
                         elif name == 'region':
                             self.rcon.run('sv_region ' + str(value))
                             actual = self._cvar('sv_region')
