@@ -41,7 +41,7 @@ frontend/                   Vue 3 + TypeScript（Vite）
 ├── src/api/                client.ts（fetch 封装：401 → 登出，{error} → 异常）、types.ts（响应类型）、endpoints.ts（每个接口一个带类型的函数）
 ├── src/stores/session.ts   全局状态：当前页面（loading / setup / login / app）、最新 status、在线玩家
 ├── src/views/              九个页面 + 登录 / 初始化
-├── src/components/         AppShell（侧栏 + 顶栏）、PluginConfigPanel（参数编辑）、Sparkline、JobRow、Switch、Toast、Mark
+├── src/components/         AppShell（侧栏 + 顶栏）、AppOverlay（原生 dialog 弹窗 / 抽屉）、PluginConfigPanel（参数编辑）、Sparkline、JobRow、Switch、Toast、Mark
 └── src/styles/app.css      “safe-room console” 主题
 sourcemod/ · tools/ · docs/ 插件源码、采样 / 预设生成脚本、文档
 ```

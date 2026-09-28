@@ -3,5 +3,5 @@ import { toastState } from '../composables/useToast'
 </script>
 
 <template>
-  <div id="toast" :class="{ show: toastState.show, bad: toastState.bad }">{{ toastState.text }}</div>
+  <div class="toast" role="status" :aria-hidden="!toastState.show" :class="{ show: toastState.show, bad: toastState.bad }">{{ toastState.text }}</div>
 </template>

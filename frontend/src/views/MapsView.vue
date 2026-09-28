@@ -2,11 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { cancelWorkshop, changeMap, deleteAddon, getAddons, startWorkshop, startZip, uploadCampaign, workshopSearch } from '../api/endpoints'
 import type { AddonsResponse, WorkshopItem } from '../api/types'
+import AppOverlay from '../components/AppOverlay.vue'
 import JobRow from '../components/JobRow.vue'
 import { run, toast } from '../composables/useToast'
 import { CAMPAIGNS } from '../data/campaigns'
 import { session } from '../stores/session'
 
+const showInstall = ref(false), uploading = ref(false), starting = ref(false)
+function openInstall() { if (!session.features?.workshop && tab.value === 'ws') tab.value = 'up'; showInstall.value = true }
 const data = ref<AddonsResponse>({ addons: [], jobs: {}, zips: {} })
 const map = ref(CAMPAIGNS[0]![0]), wsId = ref(''), upMsg = ref(''), fileEl = ref<HTMLInputElement>()
 const tab = ref<'ws' | 'up' | 'search'>('ws')   // 安装 VPK: which install method is showing
@@ -29,9 +32,11 @@ async function go(m: string) {
   setTimeout(() => session.refreshStatus(), 8000)
 }
 async function workshop() {
-  const id = wsId.value.trim(); if (!id) return
-  await run(() => startWorkshop(id), '开始下载，完成后自动安装').catch(() => {})
-  wsId.value = ''; setTimeout(load, 1500)
+  const id = wsId.value.trim(); if (!id || starting.value) return
+  starting.value = true
+  try { await run(() => startWorkshop(id), '开始下载，完成后自动安装'); wsId.value = ''; showInstall.value = false; void load() }
+  catch { /* keep input for retry */ }
+  finally { starting.value = false }
 }
 async function cancel(id: string) { await run(() => cancelWorkshop(id), '正在取消…').catch(() => {}); setTimeout(load, 1500) }
 async function del(name: string) {
@@ -53,14 +58,17 @@ async function zip(name: string) {
   }
 }
 async function uploadFile() {
+  if (uploading.value) return
   const f = fileEl.value?.files?.[0]
   if (!f) { toast('先选择一个 .vpk 或 .zip 文件', true); return }
+  uploading.value = true
   upMsg.value = `上传中 ${f.name} (${(f.size / 1048576).toFixed(1)} MB)…`
   try {
     const r = await uploadCampaign(f, p => { upMsg.value = p < 100 ? `上传中 ${p}% · ${f.name}` : `已上传，正在检查并安装 ${f.name}…` })
     upMsg.value = '已安装 ' + r.installed.map(a => `${a.name}（${a.maps.length} 张地图）`).join('、') + (r.skipped.length ? '；跳过：' + r.skipped.map(s => s.reason).join('；') : '')
     toast('上传完成' + (r.skipped.length ? `，有 ${r.skipped.length} 个文件被拒收` : ''), !!r.skipped.length); void load()
   } catch (e) { upMsg.value = '失败: ' + (e as Error).message; toast((e as Error).message, true) }
+  finally { uploading.value = false }
 }
 
 // ---- Workshop search, paged; "安装" hands the id to the download job above ----
@@ -91,23 +99,23 @@ const day = (t: number) => t ? new Date(t * 1000).toLocaleDateString() : '—'
       <button @click="go(map)">切换</button>
       <span class="mu">官方 14 个战役 + 已安装 VPK 中的地图；切换会丢失当前进度</span>
     </div>
-    <div class="card"><h2>安装 VPK / 战役<span class="sp" />
-      <span class="tabs">
+    <AppOverlay :open="showInstall" title="安装 VPK / 战役" description="选择安装方式，完成后自动热加载" kind="drawer" wide :busy="uploading || starting" @close="showInstall = false">
+      <div class="tabs drawer-tabs">
         <button v-if="session.features?.workshop" :class="{ on: tab === 'ws' }" @click="tab = 'ws'">工坊 ID / 链接</button>
         <button :class="{ on: tab === 'up' }" @click="tab = 'up'">上传 vpk / zip</button>
         <button v-if="session.features?.workshop_search" :class="{ on: tab === 'search' }" @click="tab = 'search'">搜索创意工坊</button>
-      </span></h2>
-      <div class="mt" :class="{ on: tab === 'ws' }">
-        <div class="row"><input v-model="wsId" placeholder="创意工坊 ID 或链接" style="flex:1;min-width:0" @keydown.enter="workshop"><button @click="workshop">下载安装</button></div>
+      </div>
+      <div v-if="session.features?.workshop" class="mt" :class="{ on: tab === 'ws' }">
+        <div class="row"><input aria-label="创意工坊 ID 或链接" v-model="wsId" :disabled="starting" placeholder="创意工坊 ID 或链接" style="flex:1;min-width:0" @keydown.enter="workshop"><button :disabled="starting || !wsId.trim()" @click="workshop">{{ starting ? '提交中…' : '下载安装' }}</button></div>
         <div class="note">直连 Steam CDN 分块下载，完成后自动安装、热加载，不用重启；玩家客户端按作品要求订阅对应的创意工坊物品。</div>
       </div>
       <div class="mt" :class="{ on: tab === 'up' }">
-        <div class="row"><input ref="fileEl" type="file" accept=".vpk,.zip" style="flex:1;min-width:0"><button @click="uploadFile">上传</button></div>
+        <div class="row"><input ref="fileEl" aria-label="VPK 或 ZIP 文件" :disabled="uploading" type="file" accept=".vpk,.zip" style="flex:1;min-width:0"><button :disabled="uploading" @click="uploadFile">{{ uploading ? '上传中…' : '上传' }}</button></div>
         <div class="mu">{{ upMsg }}</div>
         <div class="note">zip（例如 gamemaps.com 下载的压缩包）会自动解压并安装里面的 VPK；没有地图的资源 VPK 也会保留，地图选择只显示其中含 maps/*.bsp 的文件。</div>
       </div>
-      <div class="mt" :class="{ on: tab === 'search' }">
-        <div class="row"><input v-model="wsQuery" placeholder="工坊名或关键字，留空 = 订阅最多的内容" style="flex:1;min-width:0" @keydown.enter="search()"><button @click="search()">搜索</button></div>
+      <div v-if="session.features?.workshop_search" class="mt" :class="{ on: tab === 'search' }">
+        <div class="row"><input v-model="wsQuery" aria-label="搜索创意工坊" placeholder="工坊名或关键字，留空 = 订阅最多的内容" style="flex:1;min-width:0" @keydown.enter="search()"><button @click="search()">搜索</button></div>
         <div style="margin-top:8px">
           <div v-if="wsMsg" class="mu">{{ wsMsg }}</div>
           <div v-if="wsItems.length" class="tw"><table>
@@ -123,8 +131,8 @@ const day = (t: number) => t ? new Date(t * 1000).toLocaleDateString() : '—'
         </div>
         <div class="note">列出所有 L4D2 工坊内容；点“安装”会下载并安装 VPK。地图选择只显示已安装 VPK 中解析出的 maps/*.bsp。</div>
       </div>
-    </div>
-    <div class="card"><h2>已安装的 VPK<span class="sp" /><button class="g sm" @click="load">刷新</button></h2>
+    </AppOverlay>
+    <div class="card"><h2>已安装的 VPK <span class="mu">{{ data.addons.length }} 个文件</span><span class="sp" /><button class="g sm" @click="load">刷新</button><button class="sm" @click="openInstall">安装 VPK / 战役</button></h2>
       <div>
         <JobRow v-for="(j, id) in data.jobs" :key="'ws' + id" :label="'工坊 ' + id" :job="j"><button v-if="j.state === 'running'" class="g sm" @click="cancel(String(id))">取消</button></JobRow>
         <JobRow v-for="(j, t) in data.zips" :key="'zip' + t" label="打包" :job="j"><a v-if="j.state === 'done'" :href="'/api/download?token=' + t"> — 下载 {{ j.name }}（{{ j.size_mb }} MB）</a></JobRow>
