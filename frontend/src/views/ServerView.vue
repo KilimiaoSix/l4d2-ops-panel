@@ -2,12 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { cancelInstall, getInstall, serverAction, startInstall } from '../api/endpoints'
 import type { InstallDefaults, InstallOverview } from '../api/types'
+import AppOverlay from '../components/AppOverlay.vue'
 import { toast } from '../composables/useToast'
 import { session } from '../stores/session'
 import { getOnboarding } from '../api/panel'
 import { api } from '../api/client'
 
 const props = defineProps<{ persistDraft?: boolean }>()
+const showInstall = ref(false)
 const st = computed(() => session.status)
 const NAMES: Record<string, string> = { restart: '重启', start: '启动', stop: '停止', monitor: '巡检' }
 const load = computed(() => st.value?.sys.load?.split(' ') ?? [])
@@ -116,7 +118,10 @@ onBeforeUnmount(() => { alive = false; revision++; clearTimeout(timer) })
     </div>
     <div v-if="st?.server_error" role="alert" class="card">{{ st.server_error }}</div>
     <div class="card">
-      <h2>一键安装游戏<span class="sp" /><span class="mu">{{ !info ? '检测环境中…' : running ? '安装中' : info.installed ? '已安装' : '待安装' }}</span></h2>
+      <div class="summary-row"><div class="summary-copy"><h2>游戏安装 <span class="mu">{{ !info ? '检测环境中…' : running ? '安装中' : info.installed ? '已安装' : '待安装' }}</span></h2><p class="mu">{{ error || info?.job?.msg || info?.reason || '通过 Docker 安装游戏，由当前面板管理。' }}</p></div><button class="g" @click="showInstall = true">{{ running ? '查看安装进度' : info?.installed ? '安装详情' : '配置安装' }}</button></div>
+      <div v-if="running && progress != null" class="bar" role="progressbar" :aria-valuenow="progress" aria-valuemin="0" aria-valuemax="100" aria-label="安装进度" style="margin-top:12px"><span :style="{ width: progress + '%' }" /></div>
+    </div>
+    <AppOverlay :open="showInstall" title="一键安装游戏" description="Docker 安装配置与任务进度" kind="drawer" :busy="submitting || cancelling" @close="showInstall = false">
       <div v-if="error" role="alert" class="hint">状态读取失败：{{ error }}（正在重试）</div>
       <div v-if="info && !info.available" role="alert" class="hint">{{ info.reason }}</div>
       <template v-if="!info?.installed">
@@ -137,7 +142,7 @@ onBeforeUnmount(() => { alive = false; revision++; clearTimeout(timer) })
       <pre v-if="info?.job?.logs?.length" aria-label="安装日志">{{ info.job.logs.join('\n') }}</pre>
       <p v-if="info" class="hint">游戏目录：{{ info.game_dir }}<br>Compose：{{ info.compose_file }}</p>
       <div class="note">只安装游戏，由当前面板管理。默认 30 Tick；更高 Tick 需要对应扩展支持。SourceMod、白名单、特感预设和积分插件需另行安装；面板按实际插件显示功能。请放行游戏端口 TCP/UDP。安装在后台执行，取消不会删除游戏数据。</div>
-    </div>
+    </AppOverlay>
     <div class="band sys">
       <div class="tile"><div class="k">系统负载</div><div class="v">{{ load[0] || '-' }}</div><div class="s">{{ load.length > 2 ? `5 分钟 ${load[1]} · 15 分钟 ${load[2]}` : '' }}</div></div>
       <div class="tile"><div class="k">内存</div><div class="v">{{ memPct }}</div><div class="s">{{ memLine }}</div></div>

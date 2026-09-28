@@ -19,6 +19,7 @@ function saveDraft() {
 }
 function selectProfile(full: boolean) { selected.value = full ? [...data.value!.profiles.full!] : ['minimal']; saveDraft() }
 const running = computed(() => data.value?.job?.state === 'running')
+defineExpose({ busy, running })
 const labels = { not_installed: '未安装', restart_required: '已安装，待启动确认', active: '运行中已确认', unknown: '运行状态未知', incomplete: '事务待恢复' }
 const closure = computed(() => {
   const names = new Set<string>()

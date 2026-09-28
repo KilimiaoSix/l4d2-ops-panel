@@ -10,6 +10,7 @@ const emit = defineEmits<{ saved: [] }>()
 const doc = ref<BasicOverview | null>(null), busy = ref(false), error = ref('')
 const form = reactive({ server_name: '', ascii_fallback: 'L4D2 Server', region: 255, coop_players: 4 })
 const passwordMode = ref('keep'), password = ref(''), results = ref<Record<string, BasicFieldResult>>({})
+defineExpose({ busy })
 const draftState = ref('')
 const bytes = computed(() => new TextEncoder().encode(form.server_name.trim().normalize('NFC')).length)
 const labels: Record<string, string> = { server_name: '服务器名称', ascii_fallback: '备用名称', password: '进服密码', region: '地区', coop_players: '合作人数' }

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import AppOverlay from './AppOverlay.vue'
 import { getGameMode, setGameMode } from '../api/game-mode'
 import type { GameModeStatus } from '../api/game-mode'
 
+const showPicker = ref(false)
 const current = ref<GameModeStatus>({ mode: null, map: null, read_error: null, saved_mode: null, config_error: null, modes: [] })
 const selected = ref(''), loading = ref(false), submitting = ref(false), verifying = ref(false)
 const readError = ref(''), submitError = ref(''), notice = ref(''), verified = ref(false)
@@ -133,7 +135,7 @@ onBeforeUnmount(() => { active = false; stopVerification() })
 
 <template>
   <div class="card game-mode-panel" :aria-busy="loading || submitting || verifying">
-    <h2>游戏模式<span class="sp" /><button class="g sm" :disabled="refreshBlocked" @click="refresh">{{ loading ? '读取中…' : '刷新状态' }}</button></h2>
+    <h2>游戏模式<span class="sp" /><button class="g sm" :disabled="refreshBlocked" @click="refresh">{{ loading ? '读取中…' : '刷新状态' }}</button><button class="sm" @click="showPicker = true">切换模式</button></h2>
     <div class="mode-status">
       <div class="status-lead"><span class="status-kicker">运行配置</span><strong>{{ current.modes.length || '—' }}</strong><span>个模式选项</span></div>
       <div class="status-item"><span class="status-label"><i class="status-dot live" />当前实际</span><span class="status-value"><template v-if="current.mode"><b>{{ currentName || current.mode }}</b><code>{{ current.mode }}</code></template><span v-else class="mu">未知</span></span></div>
@@ -142,6 +144,10 @@ onBeforeUnmount(() => { active = false; stopVerification() })
     </div>
     <div v-if="readError" class="mode-error" role="alert">读取失败：{{ readError }}<span v-if="verifying"> 重载期间会自动重试读取，也可刷新状态。</span></div>
     <div v-if="current.config_error" class="mode-error" role="alert">默认模式配置异常：{{ current.config_error }} 请修复配置后刷新状态再切换。</div>
+    <p v-if="submitError" class="mode-error" role="alert">切换请求失败：{{ submitError }}</p>
+    <p v-if="notice" class="mode-notice" :class="{ verified }" role="status">{{ notice }}</p>
+    <AppOverlay :open="showPicker" title="切换游戏模式" description="选择模式后保存为默认配置，并重载起始地图" kind="drawer" wide :busy="submitting" @close="showPicker = false">
+    <p v-if="readError || current.config_error" class="mode-error" role="alert">{{ readError || current.config_error }}</p>
     <div class="mode-picker" aria-label="选择目标游戏模式">
       <div class="picker-head"><span class="picker-label">选择运行模式</span><span class="mu">点击卡片查看目标地图与规则</span></div>
       <div v-if="current.modes.length" class="mode-filters">
@@ -177,20 +183,24 @@ onBeforeUnmount(() => { active = false; stopVerification() })
           </div>
         </section>
       </div>
-      <div class="mode-controls">
-        <div v-if="target" id="game-mode-description" class="mode-description"><span class="selected-mark">已选择</span><b>{{ target.name }}</b><span>{{ target.description }}</span><code>{{ target.map }}</code><span v-if="!selectedVisible" class="selection-hidden">所选模式已被筛选隐藏，切换目标不变。</span></div>
-        <button class="mode-apply" :disabled="blocked" @click="switchMode">{{ submitting ? '正在保存…' : verifying ? '正在核对…' : '保存并切换模式' }}</button>
-      </div>
+
     </div>
     <p v-if="submitError" class="mode-error" role="alert">切换请求失败：{{ submitError }}</p>
     <p v-if="notice" class="mode-notice" :class="{ verified }" role="status">{{ notice }}</p>
     <div id="game-mode-warning" class="note"><p><b>切换会重载地图并重置当前进度，在线玩家会受影响。</b></p><p>保存前自动备份 server.cfg，并将所选模式保存为默认模式，重载和重启后继续使用。配置已保存不代表当前已生效；其他配置命令或插件仍可能覆盖模式，可刷新实际状态核对。</p></div>
+    <template #footer>
+      <div class="mode-controls">
+        <div v-if="target" id="game-mode-description" class="mode-description"><span class="selected-mark">已选择</span><b>{{ target.name }}</b><span>{{ target.description }}</span><code>{{ target.map }}</code><span v-if="!selectedVisible" class="selection-hidden">所选模式已被筛选隐藏，切换目标不变。</span></div>
+        <button class="mode-apply" :disabled="blocked" @click="switchMode">{{ submitting ? '正在保存…' : verifying ? '正在核对…' : '保存并切换模式' }}</button>
+      </div>
+    </template>
+    </AppOverlay>
   </div>
 </template>
 
 <style scoped>
-.game-mode-panel{min-width:0;overflow:hidden}
-.mode-status{display:grid;grid-template-columns:minmax(150px,.9fr) repeat(3,minmax(0,1fr));gap:1px;margin:0 -18px 18px;background:var(--bd);border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
+.game-mode-panel{min-width:0;overflow:hidden}.mode-controls{width:100%}
+.mode-status{display:grid;grid-template-columns:minmax(150px,.9fr) repeat(3,minmax(0,1fr));gap:1px;margin:0 -18px 0;background:var(--bd);border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
 .mode-status>div{min-width:0;background:var(--sur);padding:11px 14px}
 .status-lead{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;color:var(--mu);font-size:12px}.status-lead strong{font-family:var(--fd);font-size:23px;color:var(--tx);line-height:1}.status-kicker{font-size:11px;color:var(--ac)}
 .status-item{display:flex;flex-direction:column;gap:5px}.status-label{display:flex;align-items:center;gap:6px;color:var(--mu);font-size:12px}.status-value{display:flex;align-items:center;gap:7px;min-width:0;flex-wrap:wrap;overflow-wrap:anywhere}.status-value b{font-size:13px;font-weight:600}.status-value code{font-size:11px;padding:1px 4px;color:var(--mu)}.status-dot{width:6px;height:6px;border-radius:50%;background:var(--mu)}.status-dot.live{background:var(--ok)}.status-dot.saved{background:var(--ac)}
@@ -199,10 +209,10 @@ onBeforeUnmount(() => { active = false; stopVerification() })
 .mutation-hint{margin:-4px 0 14px;color:var(--mu);font-size:12px;line-height:1.6}
 .tile-english{margin-top:3px;font-size:12px;font-weight:400;color:var(--mu);line-height:1.5;overflow-wrap:anywhere}.tile-meta{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px}.native-rule{font-size:11px;font-weight:400;color:var(--warn)}
 .mode-groups{display:flex;flex-direction:column;gap:18px}.mode-group{min-width:0}.mode-group h3{display:flex;align-items:center;gap:8px;margin:0 0 8px;color:var(--mu);font-size:12px;font-weight:500}.mode-group h3 span{font-family:var(--fm);font-size:11px}
-.mode-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.mode-tile{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:0;min-width:0;height:auto;min-height:155px;padding:14px;background:var(--inp);color:var(--tx);border:1px solid var(--bd);border-radius:var(--r2);text-align:left;white-space:normal;transition:border-color .15s,background .15s,transform .15s,box-shadow .15s}.mode-tile:hover:not(:disabled){background:var(--sur2);border-color:var(--bd2);transform:translateY(-1px)}.mode-tile:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}.mode-tile.selected{border-color:var(--ac);background:#282019;box-shadow:inset 0 2px 0 var(--ac)}.mode-tile.live{border-left-color:var(--ok)}.mode-tile.saved:not(.selected){border-top-color:var(--ac2)}
+.mode-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.mode-tile{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:0;min-width:0;height:auto;min-height:155px;padding:14px;background:var(--inp);color:var(--tx);border:1px solid var(--bd);border-radius:var(--r2);text-align:left;white-space:normal;transition:border-color .15s,background .15s,transform .15s,box-shadow .15s}.mode-tile:hover:not(:disabled){background:var(--sur2);border-color:var(--bd2);transform:translateY(-1px)}.mode-tile:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}.mode-tile.selected{border-color:var(--ac);background:#282019;box-shadow:inset 0 2px 0 var(--ac)}.mode-tile.live{border-left-color:var(--ok)}.mode-tile.saved:not(.selected){border-top-color:var(--ac2)}
 .tile-top{display:flex;align-items:center;justify-content:space-between;width:100%;gap:8px}.tile-name{font-size:15px;font-weight:700;line-height:1.4}.mode-flag{flex:none;font-size:11px;line-height:1.3;padding:2px 5px;border-radius:3px;font-weight:500}.live-flag{color:var(--ok);background:rgba(94,211,137,.12)}.saved-flag{color:var(--ac2);background:rgba(240,161,58,.12)}.tile-id{font-family:var(--fm);font-size:11px;color:var(--mu);margin-top:3px;overflow-wrap:anywhere}.tile-rule{font-size:12px;font-weight:400;color:var(--mu);line-height:1.6;margin:10px 0 12px;overflow-wrap:anywhere}.tile-map{width:100%;margin-top:auto;padding-top:9px;border-top:1px solid var(--bd);font-size:12px;font-weight:400;color:var(--ac2);overflow-wrap:anywhere;line-height:1.5}
 .mode-empty{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:12px;padding:25px 14px;color:var(--mu);background:var(--inp);border:1px dashed var(--bd2);border-radius:var(--r2);text-align:center}
-.mode-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid var(--bd)}.mode-description{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;color:var(--mu);font-size:12px;line-height:1.5}.mode-description b{color:var(--tx);font-size:13px}.mode-description span:not(.selected-mark){overflow-wrap:anywhere}.selected-mark{font-size:11px;color:var(--ac);border:1px solid var(--bd2);padding:2px 5px;border-radius:3px}.mode-description code{font-size:11px}.mode-apply{flex-shrink:0}
+.mode-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0;padding:0}.mode-description{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;color:var(--mu);font-size:12px;line-height:1.5}.mode-description b{color:var(--tx);font-size:13px}.mode-description span:not(.selected-mark){overflow-wrap:anywhere}.selected-mark{font-size:11px;color:var(--ac);border:1px solid var(--bd2);padding:2px 5px;border-radius:3px}.mode-description code{font-size:11px}.mode-apply{flex-shrink:0}
 .mode-error,.mode-notice{margin:8px 0;line-height:1.6;overflow-wrap:anywhere}
 .mode-error{color:var(--bad2)}
 .mode-notice{color:var(--warn)}
@@ -211,4 +221,5 @@ code{overflow-wrap:anywhere}
 @container shell (max-width:1050px){.mode-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mode-status{grid-template-columns:repeat(3,minmax(0,1fr))}.status-lead{grid-column:span 3}}
 @container shell (max-width:860px){.mode-status{margin-left:-14px;margin-right:-14px}}
 @container shell (max-width:560px){.mode-grid{grid-template-columns:minmax(0,1fr)}.mode-status{grid-template-columns:repeat(2,minmax(0,1fr))}.status-lead{grid-column:span 2}.map-state{grid-column:span 2}.mode-controls{align-items:stretch;flex-direction:column}.mode-apply{width:100%}.picker-head{align-items:flex-start;flex-direction:column;gap:3px}.mode-tile{min-height:0}.mode-search{flex-basis:100%}}
+@media(max-width:560px){.mode-controls{align-items:stretch;flex-direction:column}.mode-apply{width:100%}}
 </style>

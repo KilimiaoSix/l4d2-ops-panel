@@ -5,7 +5,6 @@ import { getPluginConfig, getPluginConfigs, getPluginRuntime, restorePluginConfi
 import type { PluginApplyResult, PluginConfigDocument, PluginConfigFile, PluginConfigMode, PluginRuntimeValue } from '../api/types'
 
 const props = defineProps<{ plugin: string; disabled: boolean }>()
-const emit = defineEmits<{ close: [] }>()
 const files = ref<PluginConfigFile[]>([])
 const document = ref<PluginConfigDocument | null>(null)
 const file = ref(''), loading = ref(false), busy = ref(false), error = ref(''), notice = ref(''), conflict = ref(false)
@@ -24,7 +23,6 @@ function canLeave() {
   return !changed.value || confirm('有尚未保存到配置文件的修改，放弃这些修改？')
 }
 defineExpose({ canLeave })
-function close() { if (canLeave()) emit('close') }
 function acceptDocument(value: PluginConfigDocument) {
   document.value = value
   drafts.value = Object.fromEntries(value.parameters.map(p => [p.name, p.value]))
@@ -143,7 +141,6 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
 
 <template>
   <div class="card config-panel" :aria-busy="busy || loading">
-    <h2>插件参数 <code>{{ plugin }}</code><span class="sp" /><button class="g sm" :disabled="busy" @click="close">关闭</button></h2>
     <p class="mu intro">编辑会自动勾选参数，也可勾选已保存的参数进行临时应用。每次最多处理 20 项。</p>
     <div v-if="files.length" class="row config-picker">
       <label for="plugin-config-file">配置文件</label>
@@ -198,5 +195,5 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
 </template>
 
 <style scoped>
-.config-panel{min-width:0}.intro{margin:0 0 12px}.config-picker select,.backups select{flex:1;min-width:140px;max-width:100%}.parameter-list{display:flex;flex-direction:column;gap:12px;margin:12px 0}.parameter{border:1px solid var(--bd);border-radius:var(--r2);padding:14px;background:var(--inp);min-width:0}.parameter-heading{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.parameter-heading label{min-width:0;color:var(--tx)}.parameter-heading input{width:16px;height:16px;flex:none;accent-color:var(--ac)}.parameter code{white-space:pre-wrap;overflow-wrap:anywhere}.description{white-space:pre-wrap;margin:10px 0;color:var(--mu);font-size:12px}.values{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}.values>div{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}.edit-value{display:flex;gap:12px}.edit-value input{flex:1;max-width:440px;width:100%}.commands{margin-top:12px}.backups{border-top:1px solid var(--bd);padding-top:14px;margin-top:14px}.warning{color:var(--warn);font-size:12px}.error{color:var(--bad2);font-size:12px;overflow-wrap:anywhere}.success{color:var(--ok);font-size:12px}.notice{font-size:13px;line-height:1.6;margin:12px 0 0}.parameter p:last-child{margin-bottom:0}@media(max-width:650px){.values{grid-template-columns:1fr}.commands button{flex:1}.parameter-heading code{font-size:11px}}
+.config-panel{min-width:0}.intro{margin:0 0 12px}.config-picker select,.backups select{flex:1;min-width:140px;max-width:100%}.parameter-list{display:flex;flex-direction:column;gap:12px;margin:12px 0}.parameter{border:1px solid var(--bd);border-radius:var(--r2);padding:14px;background:var(--inp);min-width:0}.parameter-heading{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.parameter-heading label{min-width:0;color:var(--tx)}.parameter-heading input{width:16px;height:16px;flex:none;accent-color:var(--ac)}.parameter code{white-space:pre-wrap;overflow-wrap:anywhere}.description{white-space:pre-wrap;margin:10px 0;color:var(--mu);font-size:12px}.values{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}.values>div{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}.edit-value{display:flex;gap:12px}.edit-value input{flex:1;max-width:440px;width:100%}.commands{position:sticky;bottom:-22px;z-index:1;margin:16px -2px 0;padding:14px 2px;background:var(--sur);border-top:1px solid var(--bd)}.backups{border-top:1px solid var(--bd);padding-top:14px;margin-top:14px}.warning{color:var(--warn);font-size:12px}.error{color:var(--bad2);font-size:12px;overflow-wrap:anywhere}.success{color:var(--ok);font-size:12px}.notice{font-size:13px;line-height:1.6;margin:12px 0 0}.parameter p:last-child{margin-bottom:0}@media(max-width:650px){.values{grid-template-columns:1fr}.commands button{flex:1}.parameter-heading code{font-size:11px}}
 </style>
