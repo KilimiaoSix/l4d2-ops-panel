@@ -27,10 +27,13 @@ export const VIEWS: { name: string; title: string; eyebrow: string; component: u
   { name: 'setup', title: '开服向导', eyebrow: 'Getting started', component: PanelSetupView },
 ]
 
+// Setup stays addressable, but belongs to panel settings rather than daily navigation.
+export const NAV_VIEWS = VIEWS.filter(v => v.name !== 'setup')
+
 const LAST_VIEW_KEY = 'l4d2view'
 
 function lastView(): string {
-  try { const v = localStorage.getItem(LAST_VIEW_KEY); if (v && VIEWS.some(x => x.name === v)) return v } catch { /* storage may be unavailable */ }
+  try { const v = localStorage.getItem(LAST_VIEW_KEY); if (v && NAV_VIEWS.some(x => x.name === v)) return v } catch { /* storage may be unavailable */ }
   return 'overview'
 }
 
@@ -43,7 +46,7 @@ export const router = createRouter({
 })
 
 router.afterEach((to) => {
-  if (typeof to.name === 'string') { try { localStorage.setItem(LAST_VIEW_KEY, to.name) } catch { /* ignore */ } }
+  if (typeof to.name === 'string' && NAV_VIEWS.some(v => v.name === to.name)) { try { localStorage.setItem(LAST_VIEW_KEY, to.name) } catch { /* ignore */ } }
 })
 
 /** The single-file panel deep-linked as #players; keep those links working (#players -> #/players). */

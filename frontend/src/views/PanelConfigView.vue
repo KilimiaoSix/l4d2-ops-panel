@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { getPanelConfig, savePanelConfig } from '../api/panel'
 import type { PanelConfiguration, PanelValue } from '../api/types'
 import { toast } from '../composables/useToast'
 import { panelRestart } from '../stores/restart'
 import { session } from '../stores/session'
 
+const route = useRoute()
 const info = ref<PanelConfiguration | null>(null), form = ref<Record<string, PanelValue>>({})
 const secretChanged = ref<Record<string, boolean>>({}), error = ref(''), busy = ref(false), confirmRestart = ref(false)
 let alive = true, requestRevision = 0
@@ -100,6 +102,11 @@ onBeforeUnmount(() => { alive = false; requestRevision++ })
           <div v-else class="row"><button :disabled="busy || !Object.keys(updates).length || (needsRestart && !info.supervised)" @click="save()">{{ busy ? '正在保存…' : needsRestart ? '检查并重启' : '保存设置' }}</button></div>
           <details class="note"><summary>配置与恢复</summary><p>{{ info.config_path }}</p><p>修改前会保存私有备份。启动失败时自动尝试恢复；也可运行 <code>sudo l4d2panel-recover</code>。</p></details>
         </template>
+      </div>
+      <div v-if="route.name === 'panel'" class="card">
+        <h2>开服配置检查</h2>
+        <p class="mu">{{ session.status?.onboarding_complete ? '初始化已完成。需要时可重新检查游戏安装、插件、基础设置和加入说明。' : '开服配置尚未完成，可从上次保存的步骤继续。' }}</p>
+        <RouterLink to="/setup">{{ session.status?.onboarding_complete ? '重新检查开服配置' : '继续开服向导' }}</RouterLink>
       </div>
     </template>
   </section>
